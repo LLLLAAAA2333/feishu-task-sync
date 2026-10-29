@@ -1,29 +1,39 @@
 # Changelog
 
+**English** | [简体中文](CHANGELOG.zh-CN.md)
+
+## 1.5.0 — 2026-10-29
+
+- Rename the plugin ID, package, and GitHub repository to `feishu-task-sync`, with the display name Feishu Task Sync.
+- Add English and Chinese versions of the README, publishing guide, changelog, release notes, and validation record.
+- Migrate this project's old plugin directory, UI preferences, enabled state, and shortcuts through the install script, with backups.
+- Retain the local configuration path, vault identity, section and task GUIDs, note markers, and sync behavior.
+- Keep existing dashboard entry points compatible and leave other plugins using the old name untouched.
+
 ## 1.4.2 — 2026-10-29
 
-- Area 笔记移除或链接缓存暂不可用时，复用已有分组标识，保留分组、项目与行动 GUID。
-- 原本未解析的 Area 链接变为有效笔记后，继续使用已有分组。
-- 按笔记引用区分同名领域；短链接对应多个已有分组时，提示填写完整路径。
-- 增加分组任务分页检查及空分组清理接口。
+- Reuse existing Area section identities when an Area note is removed or its link cache is temporarily unavailable, preserving section, project, and action GUIDs.
+- Keep the existing section when a previously unresolved Area link starts resolving to a note.
+- Distinguish same-named areas by their note references. Ask for a full path when a short link matches several existing sections.
+- Add paginated section task checks and an API for removing empty sections.
 
 ## 1.4.1 — 2026-10-29
 
-- 层级概览展开为名称列表，逐项点击“改名”后再显示输入框。
-- 输入框预填当前名称；支持 Enter 保存、Esc 取消，保存与取消按钮只在编辑时出现。
-- 分组和项目超过 10 项时提供紧凑搜索，列表直接滚动查看。
-- 项目目录、额外同步范围与日记开关集中到连接设置。
+- Expand hierarchy cards into name lists; show an input only after clicking Rename on a row.
+- Prefill the current name, support Enter to save and Esc to cancel, and show save/cancel buttons while editing.
+- Offer compact search for groups and projects with more than 10 entries, with scrollable lists.
+- Consolidate the project folder, extra sync scopes, and daily-note switch in connection settings.
 
 ## 1.4.0 — 2026-10-29
 
-- 新增额外任务文件夹、笔记标签和排除文件夹，支持正文标签与子标签。
-- 普通笔记的 checkbox 进入仓库清单，无需项目元数据。
-- 同步范围统一用于发现、预览、自动监听、单条操作和跨设备接入。
-- 保留项目层级、状态回流、原 GUID 和自动同步配置。
-- Components 入口改为调用独立插件，同步实现集中在本仓库。
-- 精简设置和帮助说明，新增跨平台打包、发行校验及 GitHub Actions。
+- Add extra task folders, note tags, and excluded folders, including body tags and subtags.
+- Send ordinary note checkboxes to the vault task list without requiring project metadata.
+- Share scope selection across discovery, previews, automatic listeners, single-task operations, and device transfers.
+- Preserve project hierarchy, status updates from Feishu, original GUIDs, and automatic sync settings.
+- Route Components entry points through the independent plugin and keep sync implementation in this repository.
+- Simplify settings and help; add cross-platform packaging, release checks, and GitHub Actions.
 
 ## 1.3.0
 
-- 提供独立 Obsidian 插件面板、设置页、命令与后台同步。
-- 沿用原项目、行动关联和本机加密配置。
+- Introduce an independent Obsidian plugin panel, settings, commands, and background sync.
+- Reuse existing project and action associations and encrypted local settings.

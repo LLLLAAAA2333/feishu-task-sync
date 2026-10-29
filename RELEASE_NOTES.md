@@ -1,7 +1,13 @@
-## Feishu Sync 1.4.2
+# Feishu Task Sync 1.5.0
 
-修复 Area 链接失效后重复创建同名分组的问题。Area 笔记暂不可用、被移除或随后恢复时，沿用已有分组及任务关联。
+**English** | [简体中文](https://github.com/LLLLAAAA2333/feishu-task-sync/blob/1.5.0/RELEASE_NOTES.zh-CN.md)
 
-不同路径的同名领域仍各自保留。遇到无法唯一匹配的短链接，填写完整笔记路径后即可继续同步。
+The plugin and repository are now **Feishu Task Sync** (`feishu-task-sync`). Documentation is available in English and Simplified Chinese, with a language switch at the top of every guide.
 
-安装或升级：将 `main.js`、`manifest.json`、`styles.css` 放入 `.obsidian/plugins/feishu-sync/`，然后启用或重载「飞书任务联动」。
+The installer migrates this project's previous plugin ID, UI preferences, enabled state, and keyboard shortcuts. Existing settings, automatic sync, vault identity, Area sections, and Feishu task GUIDs carry over. Project sync and optional folder/tag scopes keep their current behavior.
+
+**New installation:** place `main.js`, `manifest.json`, and `styles.css` in `.obsidian/plugins/feishu-task-sync/`, then enable **Feishu Task Sync**.
+
+**Upgrade from JH Wang's 飞书任务联动 1.3.x–1.4.x:** close Obsidian, rename the old `feishu-sync` plugin folder to `feishu-task-sync`, keep `data.json`, and replace the three release files. Reopen Obsidian and enable the renamed plugin. Reassign custom shortcuts if upgrading manually; the source installer migrates them automatically.
+
+[Installation and upgrade guide](https://github.com/LLLLAAAA2333/feishu-task-sync/blob/1.5.0/README.md)

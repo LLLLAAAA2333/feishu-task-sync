@@ -23,6 +23,6 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: >-
           gh release create "$RELEASE_TAG"
-          dist/feishu-sync/main.js dist/feishu-sync/manifest.json dist/feishu-sync/styles.css
-          dist/Feishu-Sync-*-Desktop.zip dist/SHA256SUMS.txt
-          --title "Feishu Sync $RELEASE_TAG" --notes-file RELEASE_NOTES.md --verify-tag
+          dist/feishu-task-sync/main.js dist/feishu-task-sync/manifest.json dist/feishu-task-sync/styles.css
+          dist/Feishu-Task-Sync-*-Desktop.zip dist/SHA256SUMS.txt
+          --title "Feishu Task Sync $RELEASE_TAG" --notes-file RELEASE_NOTES.md --verify-tag

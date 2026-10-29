@@ -1,6 +1,6 @@
 {
-  "name": "feishu-sync",
-  "version": "1.4.2",
+  "name": "feishu-task-sync",
+  "version": "1.5.0",
   "private": true,
   "license": "MIT",
   "description": "Sync Obsidian projects and Markdown tasks with Feishu.",
@@ -29,10 +29,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/LLLLAAAA2333/feishu-sync.git"
+    "url": "git+https://github.com/LLLLAAAA2333/feishu-task-sync.git"
   },
-  "homepage": "https://github.com/LLLLAAAA2333/feishu-sync#readme",
+  "homepage": "https://github.com/LLLLAAAA2333/feishu-task-sync#readme",
   "bugs": {
-    "url": "https://github.com/LLLLAAAA2333/feishu-sync/issues"
+    "url": "https://github.com/LLLLAAAA2333/feishu-task-sync/issues"
   }
 }

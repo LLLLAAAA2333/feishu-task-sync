@@ -1,43 +1,45 @@
-# Feishu Sync · 飞书任务联动
+# Feishu Task Sync
 
-[下载](https://github.com/LLLLAAAA2333/feishu-sync/releases/latest) · [问题反馈](https://github.com/LLLLAAAA2333/feishu-sync/issues)
+**English** | [简体中文](README.zh-CN.md)
 
-将 Obsidian 中的项目和 Markdown 任务同步到飞书，在任一端完成或重开行动。
+[Download](https://github.com/LLLLAAAA2333/feishu-task-sync/releases/latest) · [Report an issue](https://github.com/LLLLAAAA2333/feishu-task-sync/issues)
 
-插件提供独立面板、设置页、命令和后台同步。安装三个发行文件即可使用，适用于 Obsidian 桌面版 1.7.2 及以上。
+Sync Obsidian projects and Markdown tasks with Feishu. Complete or reopen a task on either side.
 
-## 安装与连接
+The plugin includes a dedicated panel, settings, commands, and background sync. Install the three release files to use it on Obsidian desktop 1.7.2 or later. The interface currently uses Chinese.
 
-1. 下载 [最新 Release](https://github.com/LLLLAAAA2333/feishu-sync/releases/latest) 中的 `main.js`、`manifest.json`、`styles.css`，放入仓库的 `.obsidian/plugins/feishu-sync/`。也可以解压 `Feishu-Sync-1.4.2-Desktop.zip` 到这个目录。
-2. 在 Obsidian 第三方插件中启用「飞书任务联动」。
-3. 在[飞书开发者后台](https://open.feishu.cn/app)创建企业自建应用，开通应用身份权限：`task:task:write`、`task:tasklist:write`、`task:section:write`、`task:custom_field:write`，然后发布应用版本。
-4. 在插件设置填写 App ID、App Secret 和接收任务用户的 Open ID。Open ID 可从同一应用的 [API 调试台](https://open.feishu.cn/api-explorer)复制。
-5. 保存设置，打开同步概览，建立仓库清单，预览同步范围，再开启自动同步。
+## Install and connect
 
-点击左侧云图标或执行「打开飞书任务面板」进入面板。执行「立即同步任务到飞书」可立即同步。面板关闭后，后台同步继续运行；关闭仓库时停止。
+1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/LLLLAAAA2333/feishu-task-sync/releases/latest) into `.obsidian/plugins/feishu-task-sync/` in your vault. You can also extract `Feishu-Task-Sync-1.5.0-Desktop.zip` into that directory.
+2. Enable **Feishu Task Sync** in Obsidian's community plugin settings.
+3. Create a custom enterprise app in the [Feishu developer console](https://open.feishu.cn/app). Enable these app permissions: `task:task:write`, `task:tasklist:write`, `task:section:write`, and `task:custom_field:write`. Publish the app version.
+4. Enter the App ID, App Secret, and the receiving user's Open ID in the plugin settings. You can copy the Open ID from the [API Explorer](https://open.feishu.cn/api-explorer) for the same app.
+5. Save the settings, open the sync overview, create the vault task list, preview the sync scope, and enable automatic sync.
 
-概览中的层级卡片展开为名称列表。点击某一行的“改名”编辑飞书显示名称，保存后在下次同步生效；笔记文件名保持原样。
+Click the cloud icon in the ribbon or run **打开飞书任务面板** (Open Feishu task panel). Run **立即同步任务到飞书** (Sync tasks to Feishu now) for an immediate sync. Background sync continues when the panel is closed and stops when the vault closes.
 
-## 同步范围
+Expand a hierarchy card in the overview to see its names. Click **改名** (Rename) on a row to edit its Feishu display name. The next sync applies the saved name; the note's filename stays the same.
 
-默认保留项目模式。额外范围在「设置 → 飞书任务联动 → 同步范围」中添加。
+## Sync scope
 
-| 来源 | 选择方式 | 飞书中的位置 |
+Project mode is the default. Add other sources under **Settings → Feishu Task Sync → 同步范围** (Sync scope).
+
+| Source | Selection | Destination in Feishu |
 | --- | --- | --- |
-| 项目 | 项目目录内带 `project` 标签的笔记 | 仓库清单 → Area 分组 → 项目父任务 → 行动子任务 |
-| 额外文件夹 | 每行一个仓库相对路径，包含子文件夹 | checkbox 直接进入仓库清单 |
-| 额外笔记标签 | 逗号分隔，例如 `action, meeting` | 匹配笔记中的 checkbox 直接进入仓库清单 |
-| 日记 | 在连接设置的“日记行动”中启用，并设置目录、清单 GUID | 单独的日记清单 |
+| Projects | Notes tagged `project` in the project folder | Vault task list → Area section → project parent task → action subtasks |
+| Extra folders | One vault-relative path per line, including subfolders | Checkboxes go directly into the vault task list |
+| Extra note tags | Comma-separated tags, such as `action, meeting` | Checkboxes in matching notes go directly into the vault task list |
+| Daily notes | Enable **日记行动** in connection settings and set the folder and task-list GUID | A separate daily task list |
 
-额外文件夹和标签满足任一条件即可纳入。标签支持笔记属性、正文标签及子标签，例如 `action` 也匹配 `action/next`。排除文件夹优先于全部来源。项目、日记与额外范围重叠时，仍保留项目或日记原来的处理方式。
+A note is included if it matches an extra folder or tag. Tags can appear in properties or the note body; parent tags match subtags, so `action` also matches `action/next`. Excluded folders take precedence over every source. If scopes overlap, project and daily notes keep their existing behavior.
 
-例如，把 `Meetings` 加入额外文件夹，或给笔记加上 `#action`，就能同步里面的普通 checkbox。普通笔记可以没有 frontmatter，不要求 `status` 或 `area`。
+For example, add `Meetings` as an extra folder or tag a note `#action` to sync its regular checkboxes. Ordinary task notes do not need frontmatter, `status`, or `area`.
 
-移出范围后停止同步该笔记；重新加入会继续使用已有任务关联。范围预览显示项目数、额外笔记数及行动总数。
+Removing a note from the scope stops syncing it. Adding it back reuses its existing task associations. The scope preview shows the project, extra-note, and action totals.
 
-## 项目模式
+## Project mode
 
-项目目录默认使用 `50_Tasks`，可改为自己的目录。项目笔记示例：
+The default project folder is `50_Tasks`; you can choose another folder. Example project note:
 
 ```markdown
 ---
@@ -45,43 +47,51 @@ tags: [project]
 status: doing
 area: "[[work]]"
 ---
-## 下一步行动
-- [ ] 整理方案
-- [ ] 约时间讨论
+## Next actions
+- [ ] Draft a proposal
+- [ ] Schedule a discussion
 ```
 
-项目状态支持 `todo`、`doing`、`done`、`canceled`。`area` 可留空或关联一个领域笔记。项目名称、Area 名称和仓库清单名称可在概览中修改。
+Project status accepts `todo`, `doing`, `done`, and `canceled`. Leave `area` empty or link one area note. Rename projects, Area sections, and the vault task list from the overview.
 
-插件同步普通 checkbox 的标题、说明和完成状态，保留原来的父子任务关系。项目状态与行动状态独立；在飞书重开已完成项目时，会恢复它先前的待办或进行中状态。单条首次发送可以设置截止时间和提醒，时间按上海时区填写。
+The plugin syncs checkbox titles, descriptions, and completion states while retaining parent–child relationships. Project status and action status are independent. Reopening a completed project in Feishu restores its previous `todo` or `doing` status. When first sending an individual task, you can set a due time and reminder; times use the Shanghai time zone.
 
-两端同时编辑产生冲突时，面板提供对比和选择。创建结果暂未确认的任务，可通过恢复关联继续使用原任务。
+When edits on both sides conflict, the panel lets you compare and choose. If a task's creation result has not been confirmed, association recovery can reconnect the original task.
 
-## 升级与跨设备
+## Upgrade and use across devices
 
-从 1.3.0 升级只需替换三个发行文件并重载插件。现有配置、自动同步开关、仓库身份和飞书关联直接沿用，额外范围初始为空。
+Starting with 1.5.0, the plugin ID and repository name are `feishu-task-sync`, and the display name is **Feishu Task Sync**. These rename steps apply to JH Wang's **飞书任务联动** releases 1.3.x–1.4.x.
 
-在原设备关闭自动同步后，导出接入包；新设备导入后填写 App Secret、检查关联，再启用自动同步。接入包包含同步范围和任务关联。每次切换使用最新接入包，同一仓库在一台设备运行自动同步。
+1. Close Obsidian.
+2. Rename `.obsidian/plugins/feishu-sync/` to `.obsidian/plugins/feishu-task-sync/`. Keep `data.json` and replace the three release files with the new ones.
+3. Reopen Obsidian and enable **Feishu Task Sync**. If you had keyboard shortcuts, reassign them to the new plugin's commands in Hotkeys.
 
-旧 Components 仪表盘可以作为可选入口调用插件；插件的安装和运行均独立于 Components。
+When installing from source, the install script below migrates the directory, enabled state, UI preferences, and shortcuts, and backs up the old plugin. Connection settings, automatic sync, vault identity, sections, and Feishu task GUIDs carry over.
 
-## 连接与存储
+For later updates, replace the three release files in the new directory and reload the plugin.
 
-插件需要飞书账号和企业自建应用，调用 `https://open.feishu.cn/open-apis` 同步所选笔记的任务标题、说明、时间、状态和关联标识。
+To switch devices, disable automatic sync on the original device and export a transfer package. Import it on the new device, enter the App Secret, check associations, and enable automatic sync. The package includes the sync scope and task associations. Use a fresh package for each switch and run automatic sync for a vault on one device at a time.
 
-为沿用已有设备配置，插件在仓库之外保存本机数据：
+Existing Components dashboards can call the plugin as optional entry points. The plugin installs and runs independently of Components.
+
+## Connection and storage
+
+The plugin requires a Feishu account and a custom enterprise app. It calls `https://open.feishu.cn/open-apis` to sync task titles, descriptions, times, states, and association identifiers from the selected notes.
+
+To retain existing device settings, local data stays outside the vault at its original path:
 
 ```text
-~/.config/obsidian-feishu-sync/<仓库绝对路径的 SHA-256 前 24 位>/
+~/.config/obsidian-feishu-sync/<first 24 hex characters of the vault absolute path's SHA-256>/
   config.json
   records.json
   backups/
 ```
 
-App Secret 使用系统加密存储；接入包不包含密钥。插件目录的 `data.json` 保存界面偏好。仓库移动到新路径时，使用接入包恢复原身份和关联。插件不收集遥测数据。
+The App Secret uses system encryption and is excluded from transfer packages. The plugin directory's `data.json` stores UI preferences. If you move a vault to another path, restore its identity and associations with a transfer package. The plugin collects no telemetry.
 
-## 开发与发布
+## Development and releases
 
-需要 Node.js 22 或以上版本。
+Requires Node.js 22 or later.
 
 ```bash
 npm ci
@@ -91,15 +101,19 @@ npm run package
 npm run install-vault -- "/absolute/path/to/vault"
 ```
 
-安装脚本更新三个发行文件，并备份目标目录中的旧版本。自定义 Obsidian 配置目录可作为第二个参数传入。开发时运行 `npm run dev`；安装新构建后执行 `obsidian plugin:reload id=feishu-sync`。
+Close Obsidian before running the install script, then reopen it. The script backs up the previous plugin and preserves UI preferences. If it finds this project's old ID, it also migrates enabled state and shortcuts. Pass a custom Obsidian configuration directory as the second argument. Use `npm run dev` during development; after updating a build under the same ID, run `obsidian plugin:reload id=feishu-task-sync`.
 
-- `src/`：插件生命周期、面板与设置。
-- `lib/`：范围选择、任务解析、飞书 API、同步、调度和接入。
-- `tests/`：同步回归、安装包、生命周期测试。
-- `scripts/`：构建、安装、打包和发行校验。
+- `src/`: plugin lifecycle, panel, and settings.
+- `lib/`: scope selection, task parsing, Feishu API, sync, scheduling, and device transfer.
+- `tests/`: sync regressions, installation, and lifecycle tests.
+- `scripts/`: build, install, packaging, and release checks.
 
-GitHub Actions 在三个桌面平台执行测试。推送与 manifest 版本一致的标签后，发布工作流上传插件文件、ZIP 和校验和。首次提交社区目录的步骤见 [PUBLISHING.md](PUBLISHING.md)。
+GitHub Actions runs tests on all three desktop platforms. Pushing a tag that matches the manifest version publishes the plugin files, ZIP, and checksums. See the [publishing guide](PUBLISHING.md) for the first community directory submission.
+
+## Documentation
+
+[Changelog](CHANGELOG.md) · [Current release notes](RELEASE_NOTES.md) · [Validation](VALIDATION.md)
 
 ## License
 
-[MIT](LICENSE)。界面使用 React、React DOM 和 Scheduler；它们的 MIT 许可声明包含在发行文件中。
+[MIT](LICENSE). The interface uses React, React DOM, and Scheduler; their MIT license notices are included in the release bundle.

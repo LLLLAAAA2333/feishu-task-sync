@@ -1121,7 +1121,7 @@ function App({ navigation }) {
         <FeishuSyncIssues issues={syncIssues} loading={issuesLoading} error={issuesError} actionError={issueActionError}
           autoStatus={autoStatus} disabled={blocked || !service} conflictDisabled={configDirty || !configured}
           onView={viewIssue} onOpen={openIssueNote} onConflict={readConflict} />
-        {config?.autoEnabled && !autoStatus?.available && <p className="feishu-sync--notice">请在 Obsidian 第三方插件中启用「飞书任务联动」。当前仍可点击「立即同步此仓库」。</p>}
+        {config?.autoEnabled && !autoStatus?.available && <p className="feishu-sync--notice">请在 Obsidian 第三方插件中启用「Feishu Task Sync」。当前仍可点击「立即同步此仓库」。</p>}
         {scopePreview && <div className="feishu-sync--scopePreview" role="status">
           <span><strong>{Number(scopePreview.projects || 0)}</strong> 个项目</span>
           <span><strong>{Number(scopePreview.taskNotes || 0)}</strong> 篇额外笔记</span>

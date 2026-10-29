@@ -13,7 +13,7 @@ type Section = 'overview' | 'notes' | 'connection' | 'transfer' | 'help';
 class FeishuView extends ItemView {
   root: Root | null = null;
   panelNavigation: { section: Section; request: number } | undefined;
-  constructor(leaf: WorkspaceLeaf, readonly plugin: FeishuSyncPlugin) { super(leaf); }
+  constructor(leaf: WorkspaceLeaf, readonly plugin: FeishuTaskSyncPlugin) { super(leaf); }
   getViewType() { return VIEW_TYPE; }
   getDisplayText() { return '飞书同步'; }
   getIcon() { return 'cloud'; }
@@ -38,7 +38,7 @@ class FeishuView extends ItemView {
 
 class FeishuSettingTab extends PluginSettingTab {
   root: Root | null = null;
-  constructor(readonly plugin: FeishuSyncPlugin) { super(plugin.app, plugin); }
+  constructor(readonly plugin: FeishuTaskSyncPlugin) { super(plugin.app, plugin); }
   display() {
     this.root?.unmount();
     this.containerEl.empty();
@@ -52,7 +52,7 @@ class FeishuSettingTab extends PluginSettingTab {
   }
 }
 
-export default class FeishuSyncPlugin extends Plugin {
+export default class FeishuTaskSyncPlugin extends Plugin {
   readonly standalone = true;
   service: ReturnType<typeof getService> | undefined;
   scheduler: FeishuScheduler | undefined;
@@ -62,7 +62,7 @@ export default class FeishuSyncPlugin extends Plugin {
   uiData: { activeSection?: string } = {};
   uiSave: Promise<unknown> = Promise.resolve();
   settingsTab: FeishuSettingTab | undefined;
-  runtime: { plugin: FeishuSyncPlugin; storage: { getData: () => object; saveData: (data: unknown) => Promise<unknown> } } = {
+  runtime: { plugin: FeishuTaskSyncPlugin; storage: { getData: () => object; saveData: (data: unknown) => Promise<unknown> } } = {
     plugin: this,
     storage: { getData: () => this.uiData, saveData: data => this.saveUiData(data) },
   };

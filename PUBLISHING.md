@@ -1,17 +1,29 @@
-# 发布
+# Publishing
 
-## GitHub Release
+**English** | [简体中文](PUBLISHING.zh-CN.md)
 
-1. 发布仓库为 [LLLLAAAA2333/feishu-sync](https://github.com/LLLLAAAA2333/feishu-sync)，默认分支使用 `main`。
-2. 更新 `manifest.json`、`package.json`、`package-lock.json`、`versions.json` 和 `RELEASE_NOTES.md` 中的版本信息。
-3. 执行 `npm ci && npm test && npm run check-release && npm run package`。
-4. 提交后创建与 manifest 完全一致的标签，例如 `1.4.0`，推送分支和标签。
-5. `release.yml` 自动上传 `main.js`、`manifest.json`、`styles.css`、安装 ZIP 和 SHA-256 校验和。
+## GitHub releases
 
-仓库包含源码、测试、README 和 MIT 许可证。本机证据、账号配置、关联记录和构建目录均不进入版本控制。
+1. Use [LLLLAAAA2333/feishu-task-sync](https://github.com/LLLLAAAA2333/feishu-task-sync), with `main` as the default branch. The plugin ID is `feishu-task-sync` and the display name is **Feishu Task Sync**.
+2. Update the version in `manifest.json`, `package.json`, `package-lock.json`, and `versions.json`. Update both languages of the changelog, release notes, and validation record.
+3. Run `npm ci`, `npm test`, `npm run check-release`, and `npm run package`.
+4. Commit, create a tag matching the manifest version exactly, such as `1.5.0`, and push the branch and tag.
+5. The release workflow uploads `main.js`, `manifest.json`, `styles.css`, `Feishu-Task-Sync-<version>-Desktop.zip`, and `SHA256SUMS.txt`. The release notes link to their Chinese translation.
 
-## Obsidian 社区目录
+The repository includes source, tests, bilingual documentation, and an MIT license. Local evidence, account settings, task associations, and build output stay outside version control.
 
-GitHub Release 发布后，在 [Obsidian Community](https://community.obsidian.md) 登录并绑定 GitHub，添加插件仓库，查看自动检查结果并提交发布。社区上架后，用户可以在 Obsidian 内安装和更新。
+## Obsidian community directory
 
-参考：[官方提交步骤](https://docs.obsidian.md/Plugins/Releasing/Submit%20your%20plugin)、[插件提交要求](https://docs.obsidian.md/community-directory/submission-requirements-for-plugins)。社区目录会读取默认分支的 manifest，并使用对应版本的 GitHub Release 附件。
+After the GitHub release is available:
+
+1. Sign in at [Obsidian Community](https://community.obsidian.md) and connect your GitHub account in your profile.
+2. Add a plugin using `https://github.com/LLLLAAAA2333/feishu-task-sync` as the repository. The directory reads `manifest.json` from the default branch.
+3. Review the automated checks. Address errors in the repository and publish a new release when needed, then select **Publish** in the directory.
+
+After publication, users can install and update the plugin inside Obsidian. Later versions are distributed through GitHub releases without a new directory submission. The release tag must match the manifest version, and its assets must include `main.js`, `manifest.json`, and this plugin's `styles.css`.
+
+References: [official submission guide](https://docs.obsidian.md/Plugins/Releasing/Submit%20your%20plugin) · [plugin submission requirements](https://docs.obsidian.md/community-directory/submission-requirements-for-plugins).
+
+## Documentation languages
+
+`README.md` is the English entry point; `README.zh-CN.md` is the Chinese entry point. Publishing, changelog, release notes, and validation use the same `.md` / `.zh-CN.md` pairs. Each page links to its counterpart at the top. Update both languages together when behavior or installation steps change.

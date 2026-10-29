@@ -74,7 +74,7 @@ function pluginHarness(t, { config, records, savedUi, loadData, deferViews = fal
       throw new Error('Unexpected external dependency: ' + id);
     },
   };
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../dist/feishu-sync/main.js'), 'utf8'), sandbox);
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../dist/feishu-task-sync/main.js'), 'utf8'), sandbox);
   state.plugin = new sandbox.module.exports(app);
   state.app = app;
   state.events = events;
