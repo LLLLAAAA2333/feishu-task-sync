@@ -167,7 +167,7 @@ function useFeishuConfig(service, disabled, onState, onBusy) {
     return () => { alive.current = false; app.workspace.offref(ref); };
   }, [app, service]);
   const operate = async action => {
-    if (!service || disabled || transferBusy || busyRef.current || (action === "check" && dirty)) return;
+    if (!service || disabled || transferBusy || busyRef.current || (action === "check" && dirty)) return false;
     busyRef.current = true;
     setBusy(action);
     setError("");
@@ -194,8 +194,10 @@ function useFeishuConfig(service, disabled, onState, onBusy) {
         const result = await service.check();
         if (alive.current) setMessage((result && result.message) || "连接正常。");
       }
+      return true;
     } catch (failure) {
       if (alive.current) setError(failure.message || "操作失败，请检查配置后重试。");
+      return false;
     } finally {
       busyRef.current = false;
       if (alive.current) {
@@ -227,95 +229,145 @@ function FeishuConfigFeedback({ controller }) {
   </>;
 }
 
-function FeishuConfigActions({ controller, disabled, label = "保存修改" }) {
+function FeishuConfigActions({ controller, disabled, label = "保存修改", onSaved, onReset }) {
   const { saved, busy, transferBusy, dirty, operate, reset } = controller;
   const waiting = disabled || !!busy || transferBusy;
   return <div className="feishu-sync--editorActions">
     <button className="feishu-sync--button feishu-sync--primary" type="button" disabled={waiting || !dirty}
-      onClick={() => operate("save")}><FeishuIcon name="check" />{busy === "save" ? "正在保存…" : label}</button>
-    <button className="feishu-sync--button feishu-sync--quiet" type="button" disabled={!!busy || transferBusy || !dirty} onClick={reset}>撤销未保存修改</button>
+      onClick={async () => { if (await operate("save")) onSaved?.(); }}><FeishuIcon name="check" />{busy === "save" ? "正在保存…" : label}</button>
+    <button className="feishu-sync--button feishu-sync--quiet" type="button" disabled={!!busy || transferBusy || (!dirty && !onReset)}
+      onClick={() => { reset(); onReset?.(); }}>{onReset ? "取消修改" : "撤销未保存修改"}</button>
     {disabled && !busy && <span className="feishu-sync--hint">同步完成后可保存</span>}
     {!saved.appId && <span className="feishu-sync--hint">首次保存需要填写连接设置</span>}
   </div>;
+}
+
+function FeishuNameRow({ name, detail, action = "改名", editing, draft, placeholder, disabled, onEdit, onChange, onCancel, onSave, buttonRef }) {
+  const inputRef = useRef(null);
+  useEffect(() => {
+    if (editing) { inputRef.current?.focus({ preventScroll: true }); inputRef.current?.select(); }
+  }, [editing]);
+  return <li className={"feishu-sync--nameRow" + (editing ? " feishu-sync--nameRowEditing" : "")}>
+    <div className="feishu-sync--nameContent">
+      {editing ? <input className="feishu-sync--nameInput" ref={inputRef} type="text" value={draft} placeholder={placeholder}
+        aria-label={action + "：" + name} spellCheck={false} onChange={event => onChange(event.target.value)}
+        onKeyDown={event => {
+          if (event.nativeEvent.isComposing) return;
+          if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onCancel(); }
+          if (event.key === "Enter") { event.preventDefault(); event.stopPropagation(); onSave(); }
+        }} /> : <span className="feishu-sync--displayName">{name}</span>}
+      {detail && <span className="feishu-sync--nameSource" title={detail}>{detail}</span>}
+    </div>
+    {editing ? <button className="feishu-sync--iconButton" type="button" aria-label="取消此项修改" onClick={onCancel}><FeishuIcon name="x" /></button>
+      : <button className="feishu-sync--renameButton" type="button" disabled={disabled} ref={buttonRef}
+        aria-label={action + "：" + name} onClick={onEdit}><FeishuIcon name="pencil" />{action}</button>}
+  </li>;
 }
 
 function FeishuHierarchyEditor({ controller, disabled, onConnection, notePath, onOpenNote }) {
   const { form, change, hierarchy, busy, transferBusy, dirty } = controller;
   const [active, setActive] = useState("");
   const [query, setQuery] = useState("");
-  const [limit, setLimit] = useState(6);
+  const [editing, setEditing] = useState(null);
   const region = useRef("feishu-hierarchy-" + Math.random().toString(36).slice(2));
-  const inputRef = useRef(null);
   const stageRefs = useRef({});
-  const stages = [
-    { id: "vault", label: "仓库清单", icon: "list", title: form.vaultTasklistName || "设置清单名称", hint: "名称与仓库身份" },
-    { id: "areas", label: "Area 分组", icon: "layers", title: (hierarchy?.areas || []).length ? hierarchy.areas.length + " 个领域分组" : "按笔记 area 分组", hint: "编辑分组显示名称" },
-    { id: "projects", label: "项目父任务", icon: "folder-open", title: form.projectFolder || "设置项目目录", hint: "目录与项目显示名称" },
-    { id: "actions", label: "行动子任务", icon: "square-check", title: "笔记中的 checkbox", hint: "行动标题与日记范围" }
-  ];
+  const renameRefs = useRef({});
+  const focusAfterEdit = useRef("");
   useEffect(() => {
-    setQuery(""); setLimit(6);
-    if (active) inputRef.current?.querySelector("input")?.focus({ preventScroll: true });
-  }, [active]);
-  const rows = (active === "areas" ? hierarchy?.areas || [] : hierarchy?.projects || [])
-    .filter(row => !query || (row.name + " " + (row.path || row.key)).toLocaleLowerCase().includes(query.toLocaleLowerCase()));
+    if (!editing && focusAfterEdit.current) {
+      renameRefs.current[focusAfterEdit.current]?.focus({ preventScroll: true });
+      focusAfterEdit.current = "";
+    }
+  }, [editing]);
+  const stages = [
+    { id: "vault", label: "仓库清单", icon: "list", title: form.vaultTasklistName || "设置清单名称", hint: "查看清单名称" },
+    { id: "areas", label: "Area 分组", icon: "layers", title: (hierarchy?.areas || []).length ? hierarchy.areas.length + " 个领域分组" : "按笔记 area 分组", hint: "查看分组" },
+    { id: "projects", label: "项目父任务", icon: "folder-open", title: form.projectFolder || "设置项目目录", hint: "查看项目" },
+    { id: "actions", label: "行动子任务", icon: "square-check", title: "笔记中的 checkbox", hint: "查看行动来源" }
+  ];
+  const selectStage = id => { setActive(current => current === id ? "" : id); setQuery(""); setEditing(null); };
+  const finishEditing = () => {
+    focusAfterEdit.current = editing?.id || "";
+    setEditing(null);
+  };
+  const cancelEditing = () => { if (editing) change(editing.field, editing.before); finishEditing(); };
+  const save = async () => { if (!dirty || await controller.operate("save")) finishEditing(); };
+  const renderName = (id, field, key, fallback, detail, action = "改名") => {
+    const value = key ? form[field][key] || "" : form[field];
+    const name = value || fallback || "未设置";
+    return <FeishuNameRow key={id} name={name} detail={detail} action={action} disabled={!!busy || transferBusy}
+      editing={editing?.id === id} draft={editing?.draft || ""} placeholder={fallback}
+      buttonRef={element => { renameRefs.current[id] = element; }}
+      onEdit={() => setEditing({ id, field, before: form[field], draft: value || fallback || "" })}
+      onChange={text => {
+        setEditing(current => ({ ...current, draft: text }));
+        if (key) {
+          const names = { ...form[field] };
+          if (!text.trim() || text.trim() === fallback) delete names[key]; else names[key] = text;
+          change(field, names);
+        } else change(field, text);
+      }} onCancel={cancelEditing} onSave={save} />;
+  };
+  const allRows = (active === "areas" ? hierarchy?.areas || [] : hierarchy?.projects || []).map(row => {
+    const sourceName = active === "areas" ? (row.key === "__unclassified__" ? "未分类" : row.key.split("/").pop().replace(/\.md$/, "")) : row.name;
+    const name = (active === "areas" ? form.areaNames[row.key] : form.projectNames[row.id]) || sourceName;
+    return { ...row, sourceName, displayName: name };
+  });
+  const rows = allRows.filter(row => editing?.id === active + ":" + (row.key || row.id) || !query
+    || (row.displayName + " " + (row.path || row.key)).toLocaleLowerCase().includes(query.toLocaleLowerCase()));
+  const nameCounts = new Map();
+  for (const row of allRows) nameCounts.set(row.displayName, (nameCounts.get(row.displayName) || 0) + 1);
   return <div className="feishu-sync--hierarchyEditor">
-    <ol className="feishu-sync--levels" aria-label="点击编辑仓库任务层级">
+    <ol className="feishu-sync--levels" aria-label="查看仓库任务层级">
       {stages.map(stage => <li key={stage.id}>
         <button className={"feishu-sync--stage" + (active === stage.id ? " feishu-sync--stageActive" : "")} type="button"
           ref={element => { stageRefs.current[stage.id] = element; }}
-          aria-expanded={active === stage.id} aria-controls={region.current} onClick={() => setActive(current => current === stage.id ? "" : stage.id)}>
-          <span className="feishu-sync--stageLabel"><FeishuIcon name={stage.icon} />{stage.label}<FeishuIcon name="pencil" /></span>
+          aria-expanded={active === stage.id} aria-controls={region.current} onClick={() => selectStage(stage.id)}>
+          <span className="feishu-sync--stageLabel"><FeishuIcon name={stage.icon} />{stage.label}<FeishuIcon name={active === stage.id ? "chevron-up" : "chevron-down"} /></span>
           <strong title={stage.title}>{stage.title}</strong><span className="feishu-sync--stageHint">{stage.hint}</span>
         </button>
       </li>)}
     </ol>
-    {!active && <p className="feishu-sync--hint feishu-sync--editHint"><FeishuIcon name="mouse-pointer-2" />点击任意层级，在这里修改名称和范围。</p>}
-    {active && <section className="feishu-sync--inlineEditor" id={region.current} aria-label={stages.find(s => s.id === active).label + "设置"} ref={inputRef}>
+    {active && <section className="feishu-sync--hierarchyDetails" id={region.current} aria-label={stages.find(s => s.id === active).label}>
       <div className="feishu-sync--sectionHead"><h4>{stages.find(s => s.id === active).label}</h4>
-        <button className="feishu-sync--iconButton" type="button" aria-label="收起层级编辑器" onClick={() => { stageRefs.current[active]?.focus({ preventScroll: true }); setActive(""); }}><FeishuIcon name="x" /></button></div>
+        {(active === "areas" || active === "projects") && allRows.length > 10 && <input className="feishu-sync--nameSearch" type="search" value={query}
+          aria-label={active === "areas" ? "查找分组" : "查找项目"} placeholder={active === "areas" ? "查找分组" : "查找项目"}
+          onChange={event => setQuery(event.target.value)} />}
+        <button className="feishu-sync--iconButton" type="button" aria-label="收起层级详情" onClick={() => { stageRefs.current[active]?.focus({ preventScroll: true }); setActive(""); setEditing(null); }}><FeishuIcon name="x" /></button></div>
       <fieldset className="feishu-sync--fieldset" disabled={!!busy || transferBusy}>
-        {active === "vault" && <Settings>
-          <SettingInput label="飞书仓库清单名称" type="text" value={form.vaultTasklistName} onChange={event => change("vaultTasklistName", event.target.value)} />
-          <SettingInput label="仓库显示名称" type="text" value={form.vaultLabel} onChange={event => change("vaultLabel", event.target.value)} />
-          <SettingInput label="仓库标识" type="text" value={form.vaultId} placeholder="首次保存时自动生成，也可填写原 UUID" spellCheck={false}
-            onChange={event => change("vaultId", event.target.value)} />
-          <SettingDescription>同一仓库可使用不同文件夹名称。已有飞书关联时，通过跨设备接入包恢复原标识与记录。</SettingDescription>
-        </Settings>}
-        {active === "projects" && <Settings>
-          <SettingInput label="项目目录" type="text" value={form.projectFolder} spellCheck={false} placeholder="50_Tasks"
-            onChange={event => change("projectFolder", event.target.value)} />
-          <SettingDescription>该目录内带 project 标签的笔记对应父任务。下面可单独设置父任务名称，留空跟随笔记名称。</SettingDescription>
-        </Settings>}
+        {active === "vault" && <>
+          <ul className="feishu-sync--nameList">
+            {renderName("vaultTasklistName", "vaultTasklistName", null, form.vaultLabel, "飞书清单名称")}
+            {renderName("vaultLabel", "vaultLabel", null, "", "仓库显示名称")}
+          </ul>
+          <details className="feishu-sync--details"><summary>仓库身份</summary>
+            <ul className="feishu-sync--nameList">{renderName("vaultId", "vaultId", null, "", "仓库标识；首次保存时自动生成", "修改")}</ul>
+          </details>
+        </>}
+        {active === "projects" && <p className="feishu-sync--hint feishu-sync--scopeLine"><span>{form.projectFolder} 内带 project 标签的笔记</span>
+          <button className="feishu-sync--textButton" type="button" onClick={onConnection}>设置范围</button></p>}
         {(active === "areas" || active === "projects") && <>
-          <Settings><SettingInput label={active === "areas" ? "查找分组" : "查找项目"} type="search" value={query} placeholder="按名称或路径筛选"
-            onChange={event => { setQuery(event.target.value); setLimit(6); }} /></Settings>
-          <div className="feishu-sync--nameFields"><Settings>
-            {rows.slice(0, limit).map(row => <SettingInput key={row.key || row.id} label={row.name} type="text"
-              value={active === "areas" ? form.areaNames[row.key] || "" : form.projectNames[row.id] || ""} placeholder="留空跟随笔记名称"
-              onChange={event => active === "areas" ? change("areaNames", { ...form.areaNames, [row.key]: event.target.value })
-                : change("projectNames", { ...form.projectNames, [row.id]: event.target.value })} />)}
-          </Settings></div>
+          <ul className="feishu-sync--nameList feishu-sync--scrollNames">
+            {rows.map(row => renderName(active + ":" + (row.key || row.id), active === "areas" ? "areaNames" : "projectNames", row.key || row.id,
+              row.sourceName, active === "projects" ? row.path : nameCounts.get(row.displayName) > 1 ? row.key
+                : row.displayName !== row.sourceName ? "笔记：" + row.sourceName : ""))}
+          </ul>
           {!rows.length && <p className="feishu-sync--hint">{query ? "没有匹配的条目。" : "首次同步建立分组与父任务后，可在这里编辑显示名称。"}</p>}
-          {rows.length > limit && <button className="feishu-sync--button feishu-sync--quiet" type="button" onClick={() => setLimit(current => current + 6)}>显示更多（剩余 {rows.length - limit} 项）</button>}
         </>}
         {active === "actions" && <>
           <p className="feishu-sync--hint">行动标题取自笔记的 checkbox 文本。修改原笔记后，下次同步更新已有子任务。</p>
           {notePath && <button className="feishu-sync--button" type="button" onClick={onOpenNote}><FeishuIcon name="file-pen-line" />打开所选笔记编辑行动</button>}
-          <Settings>
-            <SettingSwitch label="同时同步日记行动" value={form.syncDaily} onChange={value => change("syncDaily", value)} />
-            <SettingInput label="日记目录" type="text" value={form.dailyFolder} spellCheck={false} onChange={event => change("dailyFolder", event.target.value)} />
-            {form.syncDaily && <SettingInput label="日记默认清单 GUID" type="text" value={form.defaultTasklistGuid} spellCheck={false}
-              onChange={event => change("defaultTasklistGuid", event.target.value)} />}
-            {form.syncDaily && <SettingDescription>日记清单名称以 [{form.vaultLabel || "仓库名称"}] 开头，应用需有编辑权限。</SettingDescription>}
-          </Settings>
+          <p className="feishu-sync--hint feishu-sync--scopeLine"><span>{form.syncDaily ? "同时同步日记：" + form.dailyFolder : "日记行动未开启"}</span>
+            <button className="feishu-sync--textButton" type="button" onClick={onConnection}>设置范围</button></p>
         </>}
       </fieldset>
-      <FeishuConfigActions controller={controller} disabled={disabled} label="保存层级修改" />
       {!controller.saved.appId && onConnection && <button className="feishu-sync--button" type="button" onClick={onConnection}>填写连接设置</button>}
-      <p className="feishu-sync--hint">名称修改在下次同步应用，原 GUID 和笔记文件名保留。</p>
     </section>}
-    {(active || dirty) && <FeishuConfigFeedback controller={controller} />}
+    {(editing || dirty) && <div className="feishu-sync--nameActions">
+      {editing && editing.field !== "vaultId" && <p className="feishu-sync--hint">修改飞书中的显示名称，保存后在下次同步生效。{["areaNames", "projectNames"].includes(editing.field) && "留空跟随笔记名称。"}</p>}
+      <FeishuConfigActions controller={controller} disabled={disabled} onSaved={finishEditing} onReset={finishEditing} />
+    </div>}
+    <FeishuConfigFeedback controller={{ ...controller, dirty: false }} />
   </div>;
 }
 
@@ -345,7 +397,14 @@ function FeishuConfig({ controller, disabled }) {
         <SettingDescription>文件夹每行一个，标签用逗号分隔。匹配任一文件夹或标签的笔记，其 checkbox 直接进入仓库清单。标签支持属性、正文和子标签。</SettingDescription>
         <SettingTextarea label="排除文件夹" value={form.excludedFolders} placeholder={"Templates\nArchive"} spellCheck={false}
           onChange={event => change("excludedFolders", event.target.value)} />
-        <SettingDescription>排除规则适用于全部范围。日记仍由概览中的日记开关单独控制。</SettingDescription>
+        <SettingDescription>排除规则适用于全部范围。</SettingDescription>
+      </Settings></section>
+      <section className="feishu-sync--formSection"><h4>日记行动</h4><Settings>
+        <SettingSwitch label="同时同步日记行动" value={form.syncDaily} onChange={value => change("syncDaily", value)} />
+        <SettingInput label="日记目录" type="text" value={form.dailyFolder} spellCheck={false} onChange={event => change("dailyFolder", event.target.value)} />
+        {form.syncDaily && <SettingInput label="日记默认清单 GUID" type="text" value={form.defaultTasklistGuid} spellCheck={false}
+          onChange={event => change("defaultTasklistGuid", event.target.value)} />}
+        {form.syncDaily && <SettingDescription>日记清单名称以 [{form.vaultLabel || "仓库名称"}] 开头，应用需有编辑权限。</SettingDescription>}
       </Settings></section>
       <section className="feishu-sync--formSection"><h4>自动同步</h4><Settings>
         <SettingSwitch label="开启此仓库的自动同步" value={form.autoEnabled} disabled={!hierarchyReady && !form.autoEnabled}

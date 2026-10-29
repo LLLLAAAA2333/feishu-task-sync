@@ -8,13 +8,15 @@
 
 ## 安装与连接
 
-1. 下载 [最新 Release](https://github.com/LLLLAAAA2333/feishu-sync/releases/latest) 中的 `main.js`、`manifest.json`、`styles.css`，放入仓库的 `.obsidian/plugins/feishu-sync/`。也可以解压 `Feishu-Sync-1.4.0-Desktop.zip` 到这个目录。
+1. 下载 [最新 Release](https://github.com/LLLLAAAA2333/feishu-sync/releases/latest) 中的 `main.js`、`manifest.json`、`styles.css`，放入仓库的 `.obsidian/plugins/feishu-sync/`。也可以解压 `Feishu-Sync-1.4.1-Desktop.zip` 到这个目录。
 2. 在 Obsidian 第三方插件中启用「飞书任务联动」。
 3. 在[飞书开发者后台](https://open.feishu.cn/app)创建企业自建应用，开通应用身份权限：`task:task:write`、`task:tasklist:write`、`task:section:write`、`task:custom_field:write`，然后发布应用版本。
 4. 在插件设置填写 App ID、App Secret 和接收任务用户的 Open ID。Open ID 可从同一应用的 [API 调试台](https://open.feishu.cn/api-explorer)复制。
 5. 保存设置，打开同步概览，建立仓库清单，预览同步范围，再开启自动同步。
 
 点击左侧云图标或执行「打开飞书任务面板」进入面板。执行「立即同步任务到飞书」可立即同步。面板关闭后，后台同步继续运行；关闭仓库时停止。
+
+概览中的层级卡片展开为名称列表。点击某一行的“改名”编辑飞书显示名称，保存后在下次同步生效；笔记文件名保持原样。
 
 ## 同步范围
 
@@ -25,7 +27,7 @@
 | 项目 | 项目目录内带 `project` 标签的笔记 | 仓库清单 → Area 分组 → 项目父任务 → 行动子任务 |
 | 额外文件夹 | 每行一个仓库相对路径，包含子文件夹 | checkbox 直接进入仓库清单 |
 | 额外笔记标签 | 逗号分隔，例如 `action, meeting` | 匹配笔记中的 checkbox 直接进入仓库清单 |
-| 日记 | 在概览的行动层级中启用，并设置日记目录、清单 GUID | 单独的日记清单 |
+| 日记 | 在连接设置的“日记行动”中启用，并设置目录、清单 GUID | 单独的日记清单 |
 
 额外文件夹和标签满足任一条件即可纳入。标签支持笔记属性、正文标签及子标签，例如 `action` 也匹配 `action/next`。排除文件夹优先于全部来源。项目、日记与额外范围重叠时，仍保留项目或日记原来的处理方式。
 
