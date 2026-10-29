@@ -662,6 +662,73 @@ test('changing area moves the same parent to another section without replacing i
   assert.equal((await f.service.readNote(PROJECT)).areaName, 'neuroscience');
 });
 
+test('losing and restoring an Area note retains its group, custom name, parent and child GUIDs', async t => {
+  const f = fixture(t); f.configure(); await ok(f.service.migrateVault());
+  f.service.saveConfig({ areaNames: { '00_Area/program.md': '计算与实验' } });
+  const before = f.readRecords().accounts[APP], guids = [...f.remote.tasks.keys()].sort();
+  const section = before.hierarchy.sections['00_Area/program.md'];
+  f.files.delete('00_Area/program.md');
+  await ok(f.service.syncProject(PROJECT));
+  assert.deepEqual(Object.keys(f.readRecords().accounts[APP].hierarchy.sections), ['00_Area/program.md']);
+  assert.equal(f.remote.sections.get(section.guid).name, '计算与实验');
+  f.addFile('00_Area/program.md', '# program\n');
+  await ok(f.service.syncProject(PROJECT));
+  assert.equal(f.remote.count('createSection'), 1);
+  assert.deepEqual([...f.remote.tasks.keys()].sort(), guids);
+  for (const record of Object.values(before.projects)) {
+    const next = f.readRecords().accounts[APP].projects[record.id];
+    assert.equal(next.parentTaskGuid, record.parentTaskGuid);
+    assert.equal(next.sectionGuid, section.guid);
+    assert.equal(next.areaKey, '00_Area/program.md');
+  }
+  for (const record of Object.values(before.tasks)) {
+    assert.equal(f.readRecords().accounts[APP].tasks[record.id].guid, record.guid);
+    assert.equal(f.remote.tasks.get(record.guid).parent_task_guid, record.parentTaskGuid);
+  }
+});
+
+test('an initially unresolved Area keeps its existing group when its note is created', async t => {
+  const f = fixture(t); f.files.delete('00_Area/program.md'); f.configure();
+  await ok(f.service.migrateVault());
+  const section = f.readRecords().accounts[APP].hierarchy.sections.program;
+  f.addFile('00_Area/program.md', '# program\n');
+  await ok(f.service.syncProject(PROJECT));
+  assert.deepEqual(Object.keys(f.readRecords().accounts[APP].hierarchy.sections), ['program']);
+  assert.equal(Object.values(f.readRecords().accounts[APP].projects)[0].sectionGuid, section.guid);
+  assert.equal(f.remote.count('createSection'), 1);
+});
+
+test('unavailable link metadata does not duplicate a previously resolved Area', async t => {
+  const f = fixture(t); f.configure(); await ok(f.service.migrateVault());
+  f.app.metadataCache.getFirstLinkpathDest = () => null;
+  await ok(f.service.syncProject(PROJECT));
+  assert.equal(f.remote.count('createSection'), 1);
+  assert.equal(Object.values(f.readRecords().accounts[APP].projects)[0].areaKey, '00_Area/program.md');
+});
+
+test('distinct explicit Area paths with the same basename keep separate groups', async t => {
+  const f = fixture(t, undefined, { [PROJECT]: projectText(), [EMPTY]: projectText('', 'todo', 'Other/program') });
+  f.addFile('Other/program.md', '# other program\n'); f.configure(); await ok(f.service.migrateVault());
+  assert.equal(f.remote.count('createSection'), 2);
+  const before = f.readRecords().accounts[APP];
+  assert.notEqual(before.hierarchy.sections['00_Area/program.md'].guid, before.hierarchy.sections['Other/program.md'].guid);
+  f.files.delete('Other/program.md');
+  await ok(f.service.syncProject(EMPTY));
+  assert.equal(f.remote.count('createSection'), 2);
+  f.app.metadataCache.getFirstLinkpathDest = () => null;
+  const failed = await failure(() => f.service.syncProject(PROJECT));
+  assert.match(JSON.stringify(failed), /多个已有分组/);
+  assert.equal(f.remote.count('createSection'), 2);
+});
+
+test('a different explicit unresolved Area path is not merged just because its title matches', async t => {
+  const f = fixture(t); f.configure(); await ok(f.service.migrateVault());
+  f.files.get(PROJECT).content = f.files.get(PROJECT).content.replace('[[program]]', '[[Other/program]]');
+  await ok(f.service.syncProject(PROJECT));
+  assert.equal(f.remote.count('createSection'), 2);
+  assert.equal(Object.values(f.readRecords().accounts[APP].projects)[0].areaKey, 'Other/program');
+});
+
 test('foreign and same-vault copied project markers cannot acquire hierarchy parents', async t => {
   const remote = remoteFixture();
   const study = fixture(t, remote); study.configure(); study.seedLegacy();

@@ -1,7 +1,7 @@
 {
   "id": "feishu-sync",
   "name": "飞书任务联动",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "minAppVersion": "1.7.2",
   "description": "Sync projects and Markdown tasks with Feishu, with configurable folders, tags, and two-way completion updates.",
   "author": "JH Wang",

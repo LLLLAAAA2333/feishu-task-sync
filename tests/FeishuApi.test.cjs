@@ -413,6 +413,39 @@ test('section create/get/rename and move follow the official payload and keep re
   assert.equal(calls[3].method, 'PATCH');
 });
 
+test('section task inspection follows every page without filtering out completed tasks', async () => {
+  const { client, calls } = fixture([token(), page([], { has_more: true, page_token: 'next' }),
+    page([{ guid: TASK_1, completed_at: '1234' }, { guid: TASK_2, completed_at: '0' }])]);
+  assert.deepEqual((await client.listSectionTasks(SECTION_1)).map(item => item.guid), [TASK_1, TASK_2]);
+  for (const call of calls.slice(1)) {
+    const url = new URL(call.url);
+    assert.equal(url.pathname, `/open-apis/task/v2/sections/${SECTION_1}/tasks`);
+    assert.equal(url.searchParams.has('completed'), false);
+  }
+  assert.equal(new URL(calls[2].url).searchParams.get('page_token'), 'next');
+});
+
+test('empty-section deletion checks ownership and emptiness before issuing DELETE', async () => {
+  const { client, calls } = fixture([token(), ok({ section: section() }), page([]), ok({})]);
+  await client.deleteEmptySection(SECTION_1, LIST_1);
+  assert.equal(calls.at(-1).method, 'DELETE');
+  assert.equal(new URL(calls.at(-1).url).pathname, `/open-apis/task/v2/sections/${SECTION_1}`);
+  assert.equal(calls.filter(call => call.method === 'DELETE').length, 1);
+});
+
+test('section cleanup retains default, foreign, occupied and incompletely read groups', async () => {
+  for (const responses of [
+    [ok({ section: section(SECTION_1, { is_default: true }) })],
+    [ok({ section: section(SECTION_1, { tasklist: tasklist(LIST_2) }) })],
+    [ok({ section: section() }), page([{ guid: TASK_1, completed_at: '1234' }])],
+    [ok({ section: section() }), page([], { has_more: true })],
+  ]) {
+    const { client, calls } = fixture([token(), ...responses]);
+    await assert.rejects(client.deleteEmptySection(SECTION_1, LIST_1));
+    assert.equal(calls.some(call => call.method === 'DELETE'), false);
+  }
+});
+
 test('section validators reject unintended resources, field clears, ambiguous positioning and mismatched responses', async () => {
   const { client, calls } = fixture([]);
   for (const payload of [
