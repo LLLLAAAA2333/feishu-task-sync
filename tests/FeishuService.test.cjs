@@ -340,7 +340,10 @@ test('configuration encrypts secrets outside vault and excludes them from public
   assert.equal(publicConfig.secret, undefined);
   assert.equal(publicConfig.encryptedSecret, undefined);
   assert.equal(publicConfig.storagePath, f.directory);
-  assert.equal(fs.statSync(path.join(f.directory, 'config.json')).mode & 0o777, 0o600);
+  const configFile = path.join(f.directory, 'config.json');
+  // Windows does not expose POSIX owner/group permission bits through fs.mode.
+  if (process.platform === 'win32') fs.accessSync(configFile, fs.constants.R_OK | fs.constants.W_OK);
+  else assert.equal(fs.statSync(configFile).mode & 0o777, 0o600);
   f.service.saveConfig({ appId: 'cli_test', secret: '', assigneeId: 'ou_test', defaultTasklistGuid: LIST });
   assert.equal(f.service.getConfig().hasSecret, true);
   assert.equal(f.files.size, 1);
