@@ -108,6 +108,8 @@ npm run install-vault -- "/absolute/path/to/vault"
 - `tests/`：同步回归、安装包、生命周期测试。
 - `scripts/`：构建、安装、打包和发行校验。
 
+可选仪表盘从 `app.plugins.plugins['feishu-task-sync']` 获取插件，改名前的 `service`、`openPanel`、`syncNow` 和 `getAutoStatus` 接口继续沿用。
+
 GitHub Actions 在三个桌面平台执行测试。推送与 manifest 版本一致的标签后，发布工作流上传插件文件、ZIP 和校验和。首次提交社区目录的步骤见 [发布指南](PUBLISHING.zh-CN.md)。
 
 ## 相关文档

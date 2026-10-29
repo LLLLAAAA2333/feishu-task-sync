@@ -108,6 +108,8 @@ Close Obsidian before running the install script, then reopen it. The script bac
 - `tests/`: sync regressions, installation, and lifecycle tests.
 - `scripts/`: build, install, packaging, and release checks.
 
+Optional dashboards access `app.plugins.plugins['feishu-task-sync']`. The `service`, `openPanel`, `syncNow`, and `getAutoStatus` interfaces remain available after the rename.
+
 GitHub Actions runs tests on all three desktop platforms. Pushing a tag that matches the manifest version publishes the plugin files, ZIP, and checksums. See the [publishing guide](PUBLISHING.md) for the first community directory submission.
 
 ## Documentation

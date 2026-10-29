@@ -8,7 +8,7 @@
 - Add English and Chinese versions of the README, publishing guide, changelog, release notes, and validation record.
 - Migrate this project's old plugin directory, UI preferences, enabled state, and shortcuts through the install script, with backups.
 - Retain the local configuration path, vault identity, section and task GUIDs, note markers, and sync behavior.
-- Keep existing dashboard entry points compatible and leave other plugins using the old name untouched.
+- Preserve the integration APIs under the new plugin ID and leave other plugins using the old ID untouched.
 
 ## 1.4.2 — 2026-10-29
 
