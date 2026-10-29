@@ -34,7 +34,7 @@ test('install updates plugin files, preserves data and enabled list, and backs u
   assert.equal(fs.readFileSync(path.join(backups, fs.readdirSync(backups)[0], 'feishu-task-sync/main.js'), 'utf8'), 'old-plugin');
 });
 
-function migrationFixture(t, { enabled = ['other-plugin', 'feishu-sync'], author = 'JH Wang', name = '飞书任务联动' } = {}) {
+function migrationFixture(t, { enabled = ['other-plugin', 'feishu-sync'], author = 'JH Wang', name = '飞书任务联动', version = '1.4.2' } = {}) {
   const vault = fs.mkdtempSync(path.join(os.tmpdir(), 'feishu-rename-'));
   t.after(() => fs.rmSync(vault, { recursive: true, force: true }));
   const config = path.join(vault, '.obsidian');
@@ -42,7 +42,7 @@ function migrationFixture(t, { enabled = ['other-plugin', 'feishu-sync'], author
   const target = path.join(config, 'plugins/feishu-task-sync');
   fs.mkdirSync(legacy, { recursive: true });
   fs.writeFileSync(path.join(legacy, 'main.js'), 'legacy-bundle');
-  fs.writeFileSync(path.join(legacy, 'manifest.json'), JSON.stringify({ id: 'feishu-sync', name, author, version: '1.4.2' }));
+  fs.writeFileSync(path.join(legacy, 'manifest.json'), JSON.stringify({ id: 'feishu-sync', name, author, version }));
   fs.writeFileSync(path.join(legacy, 'data.json'), '{"activeSection":"notes"}');
   if (enabled !== null) fs.writeFileSync(path.join(config, 'community-plugins.json'), JSON.stringify(enabled));
   const read = filename => JSON.parse(fs.readFileSync(path.join(config, filename), 'utf8'));
@@ -76,6 +76,14 @@ test('a disabled legacy installation stays disabled after migration', t => {
   const f = migrationFixture(t, { enabled: ['other-plugin'] });
   assert.equal(f.install().migrated, true);
   assert.deepEqual(f.read('community-plugins.json'), ['other-plugin']);
+});
+
+test('the original 1.3.0 local release migrates under its original author name', t => {
+  const f = migrationFixture(t, { author: 'Vault local tools', version: '1.3.0' });
+  assert.equal(f.install().migrated, true);
+  assert.deepEqual(f.read('community-plugins.json'), ['other-plugin', 'feishu-task-sync']);
+  assert.deepEqual(f.read('plugins/feishu-task-sync/data.json'), { activeSection: 'notes' });
+  assert.equal(fs.existsSync(f.legacy), false);
 });
 
 test('migration does not invent an enabled list for a vault without one', t => {

@@ -6,7 +6,7 @@
 
 Verified on 2026-10-29:
 
-- All 231 tests and release checks passed, including migration of enabled/disabled installations, preferences and shortcuts, repeated installs, coexisting versions, and another plugin using the legacy ID.
+- All 232 tests and release checks passed, including migration of enabled/disabled installations, preferences and shortcuts, repeated installs, coexisting versions, and another plugin using the legacy ID.
 - All 3 vault dashboard bridge checks passed with the new plugin ID and the legacy fallback.
 - Obsidian 1.14.4 on macOS loaded `feishu-task-sync` 1.5.0. The old plugin was unloaded and archived; UI preferences and automatic sync were retained.
 - The configuration SHA-256 and all 676 stored GUID fields matched before and after migration. Installed files matched the new release build.

@@ -28,7 +28,7 @@ if (manifest.id !== id) throw new Error('Build the current plugin before install
 
 // Another plugin uses the old ID. Migrate only our own pre-1.5 installation.
 const oldManifest = await readOptionalJSON(join(legacy, 'manifest.json'));
-const migrate = oldManifest?.id === legacyId && oldManifest.author === 'JH Wang' && oldManifest.name === '飞书任务联动';
+const migrate = oldManifest?.id === legacyId && ['JH Wang', 'Vault local tools'].includes(oldManifest.author) && oldManifest.name === '飞书任务联动';
 const enabledFile = join(config, 'community-plugins.json');
 const hotkeysFile = join(config, 'hotkeys.json');
 let enabled, hotkeys;
