@@ -706,6 +706,28 @@ test('unavailable link metadata does not duplicate a previously resolved Area', 
   assert.equal(Object.values(f.readRecords().accounts[APP].projects)[0].areaKey, '00_Area/program.md');
 });
 
+test('a formerly unresolved group remembers its resolved note across different link contexts', async t => {
+  const f = fixture(t); f.files.delete('00_Area/program.md'); f.configure(); await ok(f.service.migrateVault());
+  f.addFile('00_Area/program.md', '# program\n'); await ok(f.service.syncProject(PROJECT));
+  const original = f.readRecords().accounts[APP].hierarchy.sections.program;
+  assert.equal(original.sourcePath, '00_Area/program.md');
+  const other = '50_Tasks/other/example.md';
+  f.addFile('Other/program.md', '# different program\n');
+  f.addFile(other, projectText('', 'todo', 'Other/program'));
+  const resolve = f.app.metadataCache.getFirstLinkpathDest;
+  f.app.metadataCache.getFirstLinkpathDest = (target, source) => target === 'program' && source === other
+    ? f.files.get('Other/program.md') : resolve(target, source);
+  await ok(f.service.syncProject(other));
+  const sections = f.readRecords().accounts[APP].hierarchy.sections;
+  assert.equal(sections.program.guid, original.guid);
+  assert.notEqual(sections['Other/program.md'].guid, original.guid);
+  assert.equal(f.remote.count('createSection'), 2);
+  f.app.metadataCache.getFirstLinkpathDest = () => null;
+  const failed = await failure(() => f.service.syncProject(PROJECT));
+  assert.match(JSON.stringify(failed), /多个已有分组/);
+  assert.equal(f.remote.count('createSection'), 2);
+});
+
 test('distinct explicit Area paths with the same basename keep separate groups', async t => {
   const f = fixture(t, undefined, { [PROJECT]: projectText(), [EMPTY]: projectText('', 'todo', 'Other/program') });
   f.addFile('Other/program.md', '# other program\n'); f.configure(); await ok(f.service.migrateVault());
