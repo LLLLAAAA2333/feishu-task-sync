@@ -1,0 +1,38 @@
+{
+  "name": "feishu-sync",
+  "version": "1.4.0",
+  "private": true,
+  "license": "MIT",
+  "description": "Sync Obsidian projects and Markdown tasks with Feishu.",
+  "scripts": {
+    "dev": "node scripts/build.mjs --watch",
+    "build": "tsc --noEmit && node scripts/build.mjs",
+    "pretest": "npm run build",
+    "test": "node --test tests/*.test.cjs",
+    "install-vault": "node scripts/install.mjs",
+    "prepackage": "npm run build && npm run check-release",
+    "package": "node scripts/package.mjs",
+    "check-release": "node scripts/check-release.mjs"
+  },
+  "dependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.17",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "esbuild": "0.25.5",
+    "fflate": "0.8.3",
+    "obsidian": "1.14.4",
+    "typescript": "^5.8.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LLLLAAAA2333/feishu-sync.git"
+  },
+  "homepage": "https://github.com/LLLLAAAA2333/feishu-sync#readme",
+  "bugs": {
+    "url": "https://github.com/LLLLAAAA2333/feishu-sync/issues"
+  }
+}
