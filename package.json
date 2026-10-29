@@ -1,6 +1,6 @@
 {
   "name": "feishu-task-sync",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "private": true,
   "license": "MIT",
   "description": "Sync Obsidian projects and Markdown tasks with Feishu.",

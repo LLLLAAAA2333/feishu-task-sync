@@ -2,6 +2,13 @@
 
 **English** | [简体中文](CHANGELOG.zh-CN.md)
 
+## 1.5.1 — 2026-10-29
+
+- Preserve panel placement when disabling or reloading the plugin; let Obsidian manage registered views while React releases its own resources.
+- Add searchable settings on Obsidian 1.13+, retaining the existing settings form and compatibility with earlier versions.
+- Use browser timers for the panel and plugin scheduler, and replace CSS `!important` rules with scoped selectors.
+- Add GitHub build provenance attestations for the installable release files.
+
 ## 1.5.0 — 2026-10-29
 
 - Rename the plugin ID, package, and GitHub repository to `feishu-task-sync`, with the display name Feishu Task Sync.

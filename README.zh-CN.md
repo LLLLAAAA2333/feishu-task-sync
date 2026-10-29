@@ -10,7 +10,7 @@
 
 ## 安装与连接
 
-1. 下载 [最新 Release](https://github.com/LLLLAAAA2333/feishu-task-sync/releases/latest) 中的 `main.js`、`manifest.json`、`styles.css`，放入仓库的 `.obsidian/plugins/feishu-task-sync/`。也可以解压 `Feishu-Task-Sync-1.5.0-Desktop.zip` 到这个目录。
+1. 下载 [最新 Release](https://github.com/LLLLAAAA2333/feishu-task-sync/releases/latest) 中的 `main.js`、`manifest.json`、`styles.css`，放入仓库的 `.obsidian/plugins/feishu-task-sync/`。也可以解压 `Feishu-Task-Sync-1.5.1-Desktop.zip` 到这个目录。
 2. 在 Obsidian 第三方插件中启用「Feishu Task Sync」。
 3. 在[飞书开发者后台](https://open.feishu.cn/app)创建企业自建应用，开通应用身份权限：`task:task:write`、`task:tasklist:write`、`task:section:write`、`task:custom_field:write`，然后发布应用版本。
 4. 在插件设置填写 App ID、App Secret 和接收任务用户的 Open ID。Open ID 可从同一应用的 [API 调试台](https://open.feishu.cn/api-explorer)复制。

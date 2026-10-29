@@ -2,6 +2,13 @@
 
 [English](CHANGELOG.md) | **简体中文**
 
+## 1.5.1 — 2026-10-29
+
+- 停用或重载插件时保留面板位置，由 Obsidian 管理已注册视图，React 释放自身资源。
+- 支持 Obsidian 1.13+ 的设置搜索，保留原设置表单及对早期版本的兼容。
+- 面板与插件调度器使用浏览器定时器，CSS 改用限定范围的选择器替代 `!important`。
+- 为可安装的发行文件加入 GitHub 构建来源证明。
+
 ## 1.5.0 — 2026-10-29
 
 - 插件 ID、包名和 GitHub 仓库改为 `feishu-task-sync`，显示名称为 Feishu Task Sync。

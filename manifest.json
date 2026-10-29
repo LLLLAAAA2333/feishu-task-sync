@@ -1,7 +1,7 @@
 {
   "id": "feishu-task-sync",
   "name": "Feishu Task Sync",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "minAppVersion": "1.7.2",
   "description": "Sync projects and Markdown tasks with Feishu, with configurable folders, tags, and two-way completion updates.",
   "author": "JH Wang",

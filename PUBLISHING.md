@@ -7,8 +7,8 @@
 1. Use [LLLLAAAA2333/feishu-task-sync](https://github.com/LLLLAAAA2333/feishu-task-sync), with `main` as the default branch. The plugin ID is `feishu-task-sync` and the display name is **Feishu Task Sync**.
 2. Update the version in `manifest.json`, `package.json`, `package-lock.json`, and `versions.json`. Update both languages of the changelog, release notes, and validation record.
 3. Run `npm ci`, `npm test`, `npm run check-release`, and `npm run package`.
-4. Commit, create a tag matching the manifest version exactly, such as `1.5.0`, and push the branch and tag.
-5. The release workflow uploads `main.js`, `manifest.json`, `styles.css`, `Feishu-Task-Sync-<version>-Desktop.zip`, and `SHA256SUMS.txt`. The release notes link to their Chinese translation.
+4. Commit, create a tag matching the manifest version exactly, such as `1.5.1`, and push the branch and tag.
+5. The release workflow uploads `main.js`, `manifest.json`, `styles.css`, `Feishu-Task-Sync-<version>-Desktop.zip`, and `SHA256SUMS.txt`. The release notes link to their Chinese translation. The three plugin files have GitHub build provenance attestations; the ZIP and checksums support manual installation.
 
 The repository includes source, tests, bilingual documentation, and an MIT license. Local evidence, account settings, task associations, and build output stay outside version control.
 
@@ -18,7 +18,7 @@ After the GitHub release is available:
 
 1. Sign in at [Obsidian Community](https://community.obsidian.md) and connect your GitHub account in your profile.
 2. Add a plugin using `https://github.com/LLLLAAAA2333/feishu-task-sync` as the repository. The directory reads `manifest.json` from the default branch.
-3. Review the automated checks. Address errors in the repository and publish a new release when needed, then select **Publish** in the directory.
+3. Review the automated checks. Errors block installation. Fix them and use **Review branch** to preview a scan, then publish a new release. Use **Check for new releases** to refresh the version or **Request review** to re-scan it, then select **Publish** in the directory.
 
 After publication, users can install and update the plugin inside Obsidian. Later versions are distributed through GitHub releases without a new directory submission. The release tag must match the manifest version, and its assets must include `main.js`, `manifest.json`, and this plugin's `styles.css`.
 

@@ -53,14 +53,32 @@ test('open-panel command selects the current project and reuses one native view'
   assert.equal(state.notices.length, 0);
 });
 
-test('unload stops scheduling, removes views, and ignores a late layout callback', async t => {
+test('unload stops scheduling and keeps the panel leaf in place for Obsidian to restore', async t => {
   const state = pluginHarness(t); await state.plugin.onload();
+  await state.plugin.openPanel();
+  const leaf = state.leaves[0];
   state.unload(); state.layout[0]();
   assert.equal(state.plugin.scheduler.active, false);
   assert.equal(state.plugin.disposed, true);
   assert.equal(state.events.size, 0);
-  assert.deepEqual(state.detached, ['feishu-sync-panel']);
+  assert.deepEqual(state.detached, []);
+  assert.equal(state.leaves.length, 1);
+  assert.equal(state.leaves[0], leaf);
   await assert.rejects(state.plugin.openPanel(), /尚未就绪/);
+});
+
+test('view close releases its React root once without removing the workspace leaf', async t => {
+  const state = pluginHarness(t); await state.plugin.onload();
+  await state.plugin.openPanel();
+  const leaf = state.leaves[0];
+  let unmounts = 0;
+  leaf.view.root = { unmount() { unmounts++; } };
+  await leaf.view.onClose();
+  await leaf.view.onClose();
+  assert.equal(unmounts, 1);
+  assert.equal(leaf.view.root, null);
+  assert.equal(state.leaves[0], leaf);
+  assert.deepEqual(state.detached, []);
 });
 
 test('first navigation waits for a deferred view before selecting the requested page', async t => {

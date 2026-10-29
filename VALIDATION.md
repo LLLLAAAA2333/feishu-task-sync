@@ -2,6 +2,16 @@
 
 **English** | [简体中文](VALIDATION.zh-CN.md)
 
+## 1.5.1
+
+Verified on 2026-10-29:
+
+- All 233 tests passed, including leaf preservation on unload and releasing the React root exactly once when a view closes.
+- Obsidian 1.14.5 on macOS reloaded the installed 1.5.1 plugin without changing the panel's leaf or parent. Its previous React root was released, and the panel rendered again without horizontal overflow.
+- Searching settings for `App ID` found Feishu Task Sync and opened its configuration form. Closing settings released its React root.
+- Configuration SHA-256, all 676 stored GUID fields, UI preferences, and the automatic sync switch remained unchanged. Installed files matched the release build.
+- A live sync completed with 96 successes, zero failures, and two skips; the issue list was empty. All four inactive panels remained hidden after removing CSS `!important` declarations.
+
 ## 1.5.0
 
 Verified on 2026-10-29:

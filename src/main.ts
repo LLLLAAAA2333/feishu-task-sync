@@ -39,11 +39,32 @@ class FeishuView extends ItemView {
 class FeishuSettingTab extends PluginSettingTab {
   root: Root | null = null;
   constructor(readonly plugin: FeishuTaskSyncPlugin) { super(plugin.app, plugin); }
-  display() {
+  getSettingDefinitions(): Obsidian.SettingDefinitionItem[] {
+    return [{
+      name: '飞书连接与同步范围',
+      aliases: ['Feishu Task Sync', 'App ID', 'App Secret', 'Open ID', '自动同步', '项目目录', '文件夹', '标签', '日记', '跨设备', 'sync', 'folders', 'tags'],
+      render: setting => {
+        setting.settingEl.empty();
+        setting.settingEl.addClass('feishu-sync--settingsMount');
+        return this.mount(setting.settingEl);
+      },
+    }];
+  }
+  mount(containerEl: HTMLElement) {
     this.root?.unmount();
-    this.containerEl.empty();
-    this.root = createRoot(this.containerEl);
-    this.root.render(createElement(FeishuSettings, { runtime: this.plugin.runtime }));
+    containerEl.empty();
+    const root = createRoot(containerEl);
+    this.root = root;
+    root.render(createElement(FeishuSettings, { runtime: this.plugin.runtime }));
+    return () => {
+      if (this.root !== root) return;
+      root.unmount();
+      this.root = null;
+    };
+  }
+  display() {
+    // Obsidian before 1.13 renders settings through this entry point.
+    this.mount(this.containerEl);
   }
   hide() {
     this.root?.unmount();
@@ -76,13 +97,20 @@ export default class FeishuTaskSyncPlugin extends Plugin {
         throw new Error('飞书同步需要 Obsidian 桌面版。');
       }
       try {
-        const saved = await this.loadData();
-        if (SECTIONS.has(saved?.activeSection)) this.uiData = { activeSection: saved.activeSection };
+        const saved: unknown = await this.loadData();
+        if (saved && typeof saved === 'object' && 'activeSection' in saved
+          && typeof saved.activeSection === 'string' && SECTIONS.has(saved.activeSection)) {
+          this.uiData = { activeSection: saved.activeSection };
+        }
       } catch { new Notice('飞书界面偏好读取失败，已使用默认页面；同步配置保持原样。'); }
       if (this.disposed) return;
       this.service = getService(this.app, Obsidian, { openPanel: () => this.openPanel() });
       this.scheduler = new FeishuScheduler({
         service: this.service,
+        clock: {
+          setTimeout: (callback: () => void, delay: number) => window.setTimeout(callback, delay),
+          clearTimeout: (timer: number) => window.clearTimeout(timer),
+        },
         onStatus: (status?: unknown) => {
           if (!this.disposed) this.app.workspace.trigger('feishu-sync:auto-status', status);
         },
@@ -161,6 +189,6 @@ export default class FeishuTaskSyncPlugin extends Plugin {
     this.loaded = false;
     this.scheduler?.stop();
     this.settingsTab?.hide();
-    this.app.workspace.detachLeavesOfType(VIEW_TYPE);
+    // Obsidian closes registered views; onClose releases React without moving their leaves.
   }
 }

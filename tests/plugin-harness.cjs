@@ -66,6 +66,7 @@ function pluginHarness(t, { config, records, savedUi, loadData, deferViews = fal
   const sandbox = {
     module: { exports: {} }, exports: {}, console, Buffer, URL, URLSearchParams, TextEncoder, TextDecoder,
     process: { env: { NODE_ENV: 'production' } }, setTimeout, clearTimeout, setInterval, clearInterval,
+    window: { setTimeout, clearTimeout },
     require(id) {
       state.required.push(id);
       if (id === 'obsidian') return native;

@@ -77,7 +77,7 @@ function FeishuTransfer({ service, saved, disabled, onBusy }) {
     operate("read", async () => {
       if (file.size > 20 * 1024 * 1024) throw new Error("接入包超过 20 MB，请检查文件。");
       let value;
-      try { value = JSON.parse(await file.text()); } catch (_) { throw new Error("请选择有效的 JSON 接入包。"); }
+      try { value = JSON.parse(await file.text()); } catch { throw new Error("请选择有效的 JSON 接入包。"); }
       if (alive.current) {
         setBundle(value);
         setFolders({ projectFolder: saved.appId ? saved.projectFolder : value.config?.projectFolder || "",
@@ -427,7 +427,7 @@ function safeFeishuUrl(value) {
     const url = new URL(value);
     return url.protocol === "https:" && !url.username && !url.password
       && (url.hostname === "feishu.cn" || url.hostname.endsWith(".feishu.cn")) ? url.href : null;
-  } catch (_) { return null; }
+  } catch { return null; }
 }
 
 function feishuTaskHasConflict(record) {
@@ -739,8 +739,8 @@ function App({ navigation }) {
       let filesVersion = 0;
       const refreshFiles = () => {
         const version = ++filesVersion;
-        clearTimeout(filesTimer);
-        filesTimer = setTimeout(async () => {
+        window.clearTimeout(filesTimer);
+        filesTimer = window.setTimeout(async () => {
           try {
             const paths = await api.listNotes();
             if (alive.current && version === filesVersion) setFiles(paths.sort((a, b) => a.localeCompare(b, "zh-CN")));
@@ -754,16 +754,16 @@ function App({ navigation }) {
           const nextStatus = { ...(status || plugin?.getAutoStatus?.() || {}), available: !!plugin };
           setAutoStatus(nextStatus);
           refreshIssues(nextStatus.failures);
-        } catch (_) {
+        } catch {
           setAutoStatus({ available: !!plugin, lastError: "自动同步状态暂不可用。" });
           refreshIssues([]);
         }
       };
       const refreshIssues = failures => {
         const version = ++issuesVersion.current;
-        clearTimeout(issuesTimer);
+        window.clearTimeout(issuesTimer);
         setIssuesLoading(true);
-        issuesTimer = setTimeout(async () => {
+        issuesTimer = window.setTimeout(async () => {
           try {
             if (typeof api.getSyncIssues !== "function") throw new Error("当前服务尚未提供异常详情，请重新启动 Obsidian 后再查看。");
             const issues = await api.getSyncIssues(Array.isArray(failures) ? failures : []);
@@ -808,8 +808,8 @@ function App({ navigation }) {
       requestVersion.current += 1;
       issuesVersion.current += 1;
       conflictVersion.current += 1;
-      clearTimeout(issuesTimer);
-      clearTimeout(filesTimer);
+      window.clearTimeout(issuesTimer);
+      window.clearTimeout(filesTimer);
       refreshIssuesRef.current = null;
       serviceRef.current = null;
       workspaceRefs.forEach(ref => app.workspace.offref(ref));

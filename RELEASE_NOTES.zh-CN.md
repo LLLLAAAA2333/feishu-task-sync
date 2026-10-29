@@ -1,13 +1,11 @@
-# Feishu Task Sync 1.5.0
+# Feishu Task Sync 1.5.1
 
-[English](https://github.com/LLLLAAAA2333/feishu-task-sync/blob/1.5.0/RELEASE_NOTES.md) | **简体中文**
+[English](https://github.com/LLLLAAAA2333/feishu-task-sync/blob/1.5.1/RELEASE_NOTES.md) | **简体中文**
 
-插件和仓库统一改名为 **Feishu Task Sync**（`feishu-task-sync`）。文档提供英文和简体中文，每份指南顶部均可切换语言。
+修复社区审核指出的卸载时移除面板问题。停用或重载插件时保留面板位置，视图关闭时释放 React 资源。
 
-安装脚本迁移本项目的旧插件 ID、界面偏好、启用状态和快捷键。现有配置、自动同步开关、仓库身份、Area 分组和飞书任务 GUID 继续沿用。项目同步及可选的文件夹、标签范围保持现有体验。
+支持 Obsidian 1.13 及以上版本的设置搜索，保留原设置表单和早期版本的设置入口。面板与插件调度器使用浏览器定时器，样式改用限定范围的选择器；三个可安装的发行文件附带 GitHub 构建来源证明。
 
-**首次安装：** 将 `main.js`、`manifest.json`、`styles.css` 放入 `.obsidian/plugins/feishu-task-sync/`，然后启用 **Feishu Task Sync**。
+将 `main.js`、`manifest.json`、`styles.css` 更新到 `.obsidian/plugins/feishu-task-sync/`，然后重载插件。现有配置、仓库身份、任务关联和自动同步继续沿用。
 
-**从 JH Wang 的「飞书任务联动」1.3.x–1.4.x 升级：** 关闭 Obsidian，把旧插件目录 `feishu-sync` 改名为 `feishu-task-sync`，保留 `data.json`，覆盖三个新发行文件。重新打开 Obsidian 并启用改名后的插件。手动升级后重新分配自定义快捷键；源码安装脚本会自动迁移快捷键。
-
-[安装与升级指南](https://github.com/LLLLAAAA2333/feishu-task-sync/blob/1.5.0/README.zh-CN.md)
+[安装与升级指南](https://github.com/LLLLAAAA2333/feishu-task-sync/blob/1.5.1/README.zh-CN.md)
