@@ -2,6 +2,15 @@
 
 **English** | [简体中文](VALIDATION.zh-CN.md)
 
+## 1.5.2
+
+Verified on 2026-10-29:
+
+- All 235 tests and release checks passed. TypeScript strict checking covers the full React interface; the official `eslint-plugin-obsidianmd` 0.4.2 recommended rules reported zero errors and zero warnings across `src`.
+- All 16 native interface checks passed, including renaming, individual and batch cancellation, input-method confirmation, Enter/Esc, search, navigation, and the 400 px panel layout.
+- Obsidian 1.14.5 reloaded the plugin with its panel position preserved. Configuration SHA-256, all 676 stored GUID fields, UI preferences, and automatic sync remained unchanged.
+- Installed files matched the release build. Live sync completed with 96 successes, zero failures, two skips, and an empty issue list.
+
 ## 1.5.1
 
 Verified on 2026-10-29:

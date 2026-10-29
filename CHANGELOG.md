@@ -2,6 +2,12 @@
 
 **English** | [简体中文](CHANGELOG.zh-CN.md)
 
+## 1.5.2 — 2026-10-29
+
+- Type-check the complete React interface and define the configuration, task, conflict, and scheduler values exchanged with the sync engine.
+- Handle asynchronous interface actions explicitly and validate folder defaults read from transfer files.
+- Retain task identities, Feishu associations, panel placement, and the existing synchronization behavior.
+
 ## 1.5.1 — 2026-10-29
 
 - Preserve panel placement when disabling or reloading the plugin; let Obsidian manage registered views while React releases its own resources.

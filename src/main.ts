@@ -83,7 +83,7 @@ export default class FeishuTaskSyncPlugin extends Plugin {
   uiData: { activeSection?: string } = {};
   uiSave: Promise<unknown> = Promise.resolve();
   settingsTab: FeishuSettingTab | undefined;
-  runtime: { plugin: FeishuTaskSyncPlugin; storage: { getData: () => object; saveData: (data: unknown) => Promise<unknown> } } = {
+  runtime: { plugin: FeishuTaskSyncPlugin; storage: { getData: () => { activeSection?: string }; saveData: (data: unknown) => Promise<unknown> } } = {
     plugin: this,
     storage: { getData: () => this.uiData, saveData: data => this.saveUiData(data) },
   };
@@ -153,7 +153,7 @@ export default class FeishuTaskSyncPlugin extends Plugin {
     return this.uiSave.catch(error => this.report(error, '界面偏好未能保存。'));
   }
 
-  async openPanel(notePath?: string, task?: unknown, section?: Section) {
+  async openPanel(notePath?: string, task?: { line?: number }, section?: Section) {
     if (this.disposed || !this.service) throw new Error('飞书同步服务尚未就绪，请重新启用插件。');
     if (notePath) this.service.select(notePath, task);
     let leaf = this.app.workspace.getLeavesOfType(VIEW_TYPE)[0];

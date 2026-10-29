@@ -7,7 +7,7 @@
 1. 发布仓库为 [LLLLAAAA2333/feishu-task-sync](https://github.com/LLLLAAAA2333/feishu-task-sync)，默认分支为 `main`。插件 ID 为 `feishu-task-sync`，显示名称为 **Feishu Task Sync**。
 2. 更新 `manifest.json`、`package.json`、`package-lock.json` 和 `versions.json` 的版本信息。同时更新中英文的更新记录、发行说明与验证记录。
 3. 执行 `npm ci`、`npm test`、`npm run check-release` 和 `npm run package`。
-4. 提交后创建与 manifest 版本完全一致的标签，例如 `1.5.1`，推送分支和标签。
+4. 提交后创建与 manifest 版本完全一致的标签，例如 `1.5.2`，推送分支和标签。
 5. 发布工作流上传 `main.js`、`manifest.json`、`styles.css`、`Feishu-Task-Sync-<版本>-Desktop.zip` 和 `SHA256SUMS.txt`。Release 说明顶部提供中文版本链接。三个插件文件附带 GitHub 构建来源证明；ZIP 和校验和用于手动安装。
 
 仓库包含源码、测试、中英文文档和 MIT 许可证。本机证据、账号配置、关联记录和构建目录均不进入版本控制。

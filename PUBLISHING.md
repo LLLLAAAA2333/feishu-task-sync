@@ -7,7 +7,7 @@
 1. Use [LLLLAAAA2333/feishu-task-sync](https://github.com/LLLLAAAA2333/feishu-task-sync), with `main` as the default branch. The plugin ID is `feishu-task-sync` and the display name is **Feishu Task Sync**.
 2. Update the version in `manifest.json`, `package.json`, `package-lock.json`, and `versions.json`. Update both languages of the changelog, release notes, and validation record.
 3. Run `npm ci`, `npm test`, `npm run check-release`, and `npm run package`.
-4. Commit, create a tag matching the manifest version exactly, such as `1.5.1`, and push the branch and tag.
+4. Commit, create a tag matching the manifest version exactly, such as `1.5.2`, and push the branch and tag.
 5. The release workflow uploads `main.js`, `manifest.json`, `styles.css`, `Feishu-Task-Sync-<version>-Desktop.zip`, and `SHA256SUMS.txt`. The release notes link to their Chinese translation. The three plugin files have GitHub build provenance attestations; the ZIP and checksums support manual installation.
 
 The repository includes source, tests, bilingual documentation, and an MIT license. Local evidence, account settings, task associations, and build output stay outside version control.

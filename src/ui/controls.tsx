@@ -1,10 +1,10 @@
 import React, { useId } from 'react';
 
-export function Settings({ children }) {
+export function Settings({ children }: React.PropsWithChildren) {
   return <div className="feishu-sync--settings">{children}</div>;
 }
 
-export function SettingInput({ label, ...props }) {
+export function SettingInput({ label, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) {
   const id = useId();
   return <div className="feishu-sync--settingItem">
     <div className="feishu-sync--settingLabel"><label htmlFor={id}>{label}</label></div>
@@ -12,7 +12,7 @@ export function SettingInput({ label, ...props }) {
   </div>;
 }
 
-export function SettingSwitch({ label, value, onChange, disabled }) {
+export function SettingSwitch({ label, value, onChange, disabled }: { label: string; value: boolean; onChange: (value: boolean) => void; disabled?: boolean }) {
   const id = useId();
   return <div className="feishu-sync--settingItem feishu-sync--switchItem">
     <label className="feishu-sync--settingLabel" htmlFor={id}>{label}</label>
@@ -21,7 +21,7 @@ export function SettingSwitch({ label, value, onChange, disabled }) {
   </div>;
 }
 
-export function SettingTextarea({ label, ...props }) {
+export function SettingTextarea({ label, ...props }: React.TextareaHTMLAttributes<HTMLTextAreaElement> & { label: string }) {
   const id = useId();
   return <div className="feishu-sync--settingItem">
     <div className="feishu-sync--settingLabel"><label htmlFor={id}>{label}</label></div>
@@ -29,6 +29,6 @@ export function SettingTextarea({ label, ...props }) {
   </div>;
 }
 
-export function SettingDescription({ children }) {
+export function SettingDescription({ children }: React.PropsWithChildren) {
   return <p className="feishu-sync--settingDescription">{children}</p>;
 }

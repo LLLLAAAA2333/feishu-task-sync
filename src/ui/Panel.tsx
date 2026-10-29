@@ -2,8 +2,20 @@ import React, { createContext, useContext, useState, useRef, useEffect, useCallb
 import * as Obsidian from 'obsidian';
 import { Settings, SettingInput, SettingSwitch, SettingDescription, SettingTextarea } from './controls';
 import { label as scopeLabel } from '../../lib/feishu-scope.cjs';
+import type FeishuTaskSyncPlugin from '../main';
+import type { Action, AutoStatus, ConflictChoice, ConflictPreview, ConflictTarget, FeishuService, HierarchyStatus, NoteSnapshot, RecoveryInput, ResourceRecovery, ScopePreview, Selection, SyncConfig, SyncFailure, SyncIssue, SyncResult, TaskOptions, TaskRecord, TransferPreview } from '../contracts';
+import { errorCode, errorMessage, transferFolders } from './errors';
 
-const Runtime = createContext(null);
+type PluginRuntime = FeishuTaskSyncPlugin['runtime'];
+type Navigation = { section: string; request: number };
+type ConfigForm = ReturnType<typeof feishuConfigValues>;
+type ConfigController = ReturnType<typeof useFeishuConfig>;
+type ConfigState = { saved: Partial<SyncConfig>; dirty: boolean };
+type UiAutoStatus = Partial<AutoStatus> & { available?: boolean };
+type ConflictState = { target: ConflictTarget; preview: ConflictPreview | null; choice: ConflictChoice | ''; phase: string; error: string };
+type NameField = 'vaultTasklistName' | 'vaultLabel' | 'vaultId' | 'areaNames' | 'projectNames';
+type NameEdit = { id: string; field: NameField; before: string | Record<string, string>; draft: string };
+const Runtime = createContext<PluginRuntime | null>(null);
 const SECTIONS = ['overview', 'notes', 'connection', 'transfer', 'help'];
 function useRuntime() {
   const runtime = useContext(Runtime);
@@ -24,8 +36,8 @@ function FeishuHelp() {
   </ol>;
 }
 
-function feishuConfigValues(config, app) {
-  const base = app.vault.adapter.getBasePath?.() || "";
+function feishuConfigValues(config: Partial<SyncConfig>, app: Obsidian.App) {
+  const base = app.vault.adapter instanceof Obsidian.FileSystemAdapter ? app.vault.adapter.getBasePath() : "";
   return {
     appId: config.appId || "", assigneeId: config.assigneeId || "", defaultTasklistGuid: config.defaultTasklistGuid || "", vaultId: config.vaultId || "",
     vaultLabel: config.vaultLabel || app.vault.getName?.() || base.split(/[\\/]/).filter(Boolean).pop() || "本仓库",
@@ -39,49 +51,50 @@ function feishuConfigValues(config, app) {
   };
 }
 
-function readFeishuHierarchy(service) {
-  return typeof service.getHierarchyStatus === "function" ? service.getHierarchyStatus() : null;
+function readFeishuHierarchy(service: FeishuService | null | undefined) {
+  return service ? service.getHierarchyStatus() : null;
 }
 
-function FeishuTransfer({ service, saved, disabled, onBusy }) {
-  const [bundle, setBundle] = useState(null);
+function FeishuTransfer({ service, saved, disabled, onBusy }: { service: FeishuService; saved: Partial<SyncConfig>; disabled: boolean; onBusy?: (busy: boolean) => void }) {
+  const [bundle, setBundle] = useState<unknown>(null);
   const [folders, setFolders] = useState({ projectFolder: "", dailyFolder: "" });
-  const [preview, setPreview] = useState(null);
+  const [preview, setPreview] = useState<TransferPreview | null>(null);
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const busyRef = useRef(false);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
-  const operate = async (action, operation) => {
+  const operate = async (action: string, operation: () => Promise<void>) => {
     if (disabled || busyRef.current) return;
     busyRef.current = true; setBusy(action); setError(""); setMessage("");
     if (onBusy) onBusy(true);
     try { await operation(); }
-    catch (failure) { if (alive.current) setError(failure.message || "接入操作失败。"); }
+    catch (failure) { if (alive.current) setError(errorMessage(failure) || "接入操作失败。"); }
     finally { busyRef.current = false; if (alive.current) { setBusy(""); if (onBusy) onBusy(false); } }
   };
   const exportFile = () => operate("export", async () => {
     const value = service.exportTransfer();
     const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2)], { type: "application/json" }));
-    const link = document.createElement("a");
+    const link = createEl("a");
     link.href = url; link.download = "feishu-sync-" + value.config.vaultLabel + "-transfer.json";
     document.body.appendChild(link); link.click(); link.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     if (alive.current) setMessage("接入包已导出，包含仓库身份与关联记录，不含 App Secret。切换设备前请使用最新接入包。");
   });
-  const readFile = event => {
+  const readFile = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     setBundle(null); setPreview(null);
     if (!file) return;
-    operate("read", async () => {
+    void operate("read", async () => {
       if (file.size > 20 * 1024 * 1024) throw new Error("接入包超过 20 MB，请检查文件。");
-      let value;
+      let value: unknown;
       try { value = JSON.parse(await file.text()); } catch { throw new Error("请选择有效的 JSON 接入包。"); }
       if (alive.current) {
         setBundle(value);
-        setFolders({ projectFolder: saved.appId ? saved.projectFolder : value.config?.projectFolder || "",
-          dailyFolder: saved.appId ? saved.dailyFolder : value.config?.dailyFolder || "" });
+        const importedFolders = transferFolders(value);
+        setFolders({ projectFolder: saved.appId ? saved.projectFolder || "" : importedFolders.projectFolder,
+          dailyFolder: saved.appId ? saved.dailyFolder || "" : importedFolders.dailyFolder });
       }
     });
   };
@@ -90,8 +103,8 @@ function FeishuTransfer({ service, saved, disabled, onBusy }) {
     <p className="feishu-sync--hint">先关闭自动同步并保存。导入会保留原飞书 GUID，不创建远端资源；覆盖前备份本机配置与记录。文件夹改名时按笔记标识重新定位。两台设备轮流启用同步。</p>
     <fieldset className="feishu-sync--fieldset" disabled={disabled || !!busy || saved.autoEnabled}>
       <div className="feishu-sync--actions">
-        <button className="feishu-sync--button" type="button" disabled={!saved.vaultId} onClick={exportFile}>{busy === "export" ? "正在导出…" : "导出接入包（不含密钥）"}</button>
-        <button className="feishu-sync--button" type="button" disabled={!saved.hasSecret} onClick={() => operate("check", async () => {
+        <button className="feishu-sync--button" type="button" disabled={!saved.vaultId} onClick={() => void exportFile()}>{busy === "export" ? "正在导出…" : "导出接入包（不含密钥）"}</button>
+        <button className="feishu-sync--button" type="button" disabled={!saved.hasSecret} onClick={() => void operate("check", async () => {
           const result = await service.checkAssociations();
           if (alive.current) {
             setMessage("已检查 " + result.checked + " 个原关联，失败 " + result.failed + " 个。");
@@ -101,10 +114,10 @@ function FeishuTransfer({ service, saved, disabled, onBusy }) {
       </div>
       <Settings>
         <SettingInput label="选择原设备导出的接入包" type="file" accept=".json,application/json" onChange={readFile} />
-        {bundle && <SettingInput label="本机项目目录" type="text" value={folders.projectFolder} onChange={event => { setFolders({ ...folders, projectFolder: event.target.value }); setPreview(null); }} />}
-        {bundle && <SettingInput label="本机日记目录" type="text" value={folders.dailyFolder} onChange={event => { setFolders({ ...folders, dailyFolder: event.target.value }); setPreview(null); }} />}
+        {!!bundle && <SettingInput label="本机项目目录" type="text" value={folders.projectFolder} onChange={event => { setFolders({ ...folders, projectFolder: event.target.value }); setPreview(null); }} />}
+        {!!bundle && <SettingInput label="本机日记目录" type="text" value={folders.dailyFolder} onChange={event => { setFolders({ ...folders, dailyFolder: event.target.value }); setPreview(null); }} />}
       </Settings>
-      {bundle && <button className="feishu-sync--button" type="button" onClick={() => operate("preview", async () => {
+      {!!bundle && <button className="feishu-sync--button" type="button" onClick={() => void operate("preview", async () => {
         setPreview(null);
         const result = await service.previewTransfer(bundle, folders);
         if (alive.current) setPreview(result);
@@ -118,7 +131,7 @@ function FeishuTransfer({ service, saved, disabled, onBusy }) {
         {(preview.warnings || []).map(warning => <p className="feishu-sync--notice" key={warning}>{warning}</p>)}
         {preview.conflicts > 0 && <p className="feishu-sync--notice">{preview.conflicts} 个已有记录内容不同，确认后采用接入包版本。本机独有记录会保留。</p>}
         {preview.missing > 0 && <p className="feishu-sync--notice">{preview.missing} 个关联未在目标目录找到笔记标识。请核对目录与笔记是否已同步；记录将保留。</p>}
-        <button className="feishu-sync--button feishu-sync--primary" type="button" onClick={() => operate("import", async () => {
+        <button className="feishu-sync--button feishu-sync--primary" type="button" onClick={() => void operate("import", async () => {
           const result = await service.importTransfer(preview.token);
           if (alive.current) { setPreview(null); setBundle(null); setMessage("接入已保存，自动同步保持关闭。本机备份：" + result.backupPath + "。请填写本机 App Secret，检查连接与原关联后再同步。"); }
         })}>{busy === "import" ? "正在导入…" : "确认导入并保留原关联"}</button>
@@ -130,9 +143,9 @@ function FeishuTransfer({ service, saved, disabled, onBusy }) {
   </div>;
 }
 
-function useFeishuConfig(service, disabled, onState, onBusy) {
+function useFeishuConfig(service: FeishuService | null | undefined, disabled: boolean, onState?: (state: ConfigState) => void, onBusy?: (busy: boolean) => void) {
   const app = useObsidianApp();
-  const [saved, setSaved] = useState(() => service?.getConfig() || {});
+  const [saved, setSaved] = useState<Partial<SyncConfig>>(() => service?.getConfig() || {});
   const [hierarchy, setHierarchy] = useState(() => service ? readFeishuHierarchy(service) : null);
   const [form, setForm] = useState(() => feishuConfigValues(saved, app));
   const [secret, setSecret] = useState("");
@@ -145,9 +158,9 @@ function useFeishuConfig(service, disabled, onState, onBusy) {
   const dirtyRef = useRef(false);
   const savedValues = feishuConfigValues(saved, app);
   const hierarchyReady = !!saved.hierarchyEnabled && hierarchy?.migration?.state === "ready";
-  const dirty = Object.keys(savedValues).some(key => JSON.stringify(form[key]) !== JSON.stringify(savedValues[key])) || !!secret;
+  const dirty = (Object.keys(savedValues) as (keyof ConfigForm)[]).some(key => JSON.stringify(form[key]) !== JSON.stringify(savedValues[key])) || !!secret;
   dirtyRef.current = dirty;
-  const change = (key, value) => setForm(current => ({ ...current, [key]: value }));
+  const change = <K extends keyof ConfigForm,>(key: K, value: ConfigForm[K]) => setForm(current => ({ ...current, [key]: value }));
   useEffect(() => { if (service && onState) onState({ saved, dirty }); }, [service, saved, dirty, onState]);
   useEffect(() => {
     alive.current = true;
@@ -162,11 +175,11 @@ function useFeishuConfig(service, disabled, onState, onBusy) {
         setSaved(next);
         setHierarchy(readFeishuHierarchy(service));
         if (!dirtyRef.current) setForm(feishuConfigValues(next, app));
-      } catch (failure) { setError(failure.message || "读取本机配置失败。"); }
+      } catch (failure) { setError(errorMessage(failure) || "读取本机配置失败。"); }
     });
     return () => { alive.current = false; app.workspace.offref(ref); };
   }, [app, service]);
-  const operate = async action => {
+  const operate = async (action: 'save' | 'check') => {
     if (!service || disabled || transferBusy || busyRef.current || (action === "check" && dirty)) return false;
     busyRef.current = true;
     setBusy(action);
@@ -178,7 +191,7 @@ function useFeishuConfig(service, disabled, onState, onBusy) {
         if (form.autoEnabled && !hierarchyReady) throw new Error("请先关闭自动同步并保存，在主面板完成新层级启用或迁移后再开启。");
         const pollMinutes = Number(form.pollMinutes);
         if (!Number.isInteger(pollMinutes) || pollMinutes < 1 || pollMinutes > 60) throw new Error("同步间隔须为 1-60 的整数分钟。");
-        const next = await service.saveConfig({
+        const next = service.saveConfig({
           ...feishuConfigValues(service.getConfig(), app), ...form, secret, pollMinutes,
           appId: form.appId.trim(), assigneeId: form.assigneeId.trim(), defaultTasklistGuid: form.defaultTasklistGuid.trim(),
           vaultLabel: form.vaultLabel.trim(), projectFolder: form.projectFolder.trim(), dailyFolder: form.dailyFolder.trim()
@@ -196,7 +209,7 @@ function useFeishuConfig(service, disabled, onState, onBusy) {
       }
       return true;
     } catch (failure) {
-      if (alive.current) setError(failure.message || "操作失败，请检查配置后重试。");
+      if (alive.current) setError(errorMessage(failure) || "操作失败，请检查配置后重试。");
       return false;
     } finally {
       busyRef.current = false;
@@ -207,12 +220,12 @@ function useFeishuConfig(service, disabled, onState, onBusy) {
     }
   };
   const reset = () => { setForm(feishuConfigValues(saved, app)); setSecret(""); setError(""); setMessage(""); };
-  const onTransferBusy = value => { setTransferBusy(value); if (onBusy) onBusy(value); };
+  const onTransferBusy = (value: boolean) => { setTransferBusy(value); if (onBusy) onBusy(value); };
   return { saved, hierarchy, form, secret, setSecret, busy, transferBusy, message, error, dirty, change, operate, reset, onTransferBusy };
 }
 
-function FeishuIcon({ name }) {
-  const ref = useRef(null);
+function FeishuIcon({ name }: { name: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     if (ref.current && typeof Obsidian.setIcon === "function") Obsidian.setIcon(ref.current, name);
     return () => { if (ref.current) ref.current.replaceChildren(); };
@@ -220,7 +233,7 @@ function FeishuIcon({ name }) {
   return <span className="feishu-sync--icon" ref={ref} aria-hidden="true" />;
 }
 
-function FeishuConfigFeedback({ controller }) {
+function FeishuConfigFeedback({ controller }: { controller: Pick<ConfigController, 'dirty' | 'message' | 'error'> }) {
   const { dirty, message, error } = controller;
   return <>
     {dirty && <p className="feishu-sync--notice" role="status">有未保存的修改。后台仍使用已保存的配置。</p>}
@@ -229,12 +242,12 @@ function FeishuConfigFeedback({ controller }) {
   </>;
 }
 
-function FeishuConfigActions({ controller, disabled, label = "保存修改", onSaved, onReset }) {
+function FeishuConfigActions({ controller, disabled, label = "保存修改", onSaved, onReset }: { controller: ConfigController; disabled: boolean; label?: string; onSaved?: () => void; onReset?: () => void }) {
   const { saved, busy, transferBusy, dirty, operate, reset } = controller;
   const waiting = disabled || !!busy || transferBusy;
   return <div className="feishu-sync--editorActions">
     <button className="feishu-sync--button feishu-sync--primary" type="button" disabled={waiting || !dirty}
-      onClick={async () => { if (await operate("save")) onSaved?.(); }}><FeishuIcon name="check" />{busy === "save" ? "正在保存…" : label}</button>
+      onClick={() => { void operate("save").then(saved => { if (saved) onSaved?.(); }); }}><FeishuIcon name="check" />{busy === "save" ? "正在保存…" : label}</button>
     <button className="feishu-sync--button feishu-sync--quiet" type="button" disabled={!!busy || transferBusy || (!dirty && !onReset)}
       onClick={() => { reset(); onReset?.(); }}>{onReset ? "取消修改" : "撤销未保存修改"}</button>
     {disabled && !busy && <span className="feishu-sync--hint">同步完成后可保存</span>}
@@ -242,8 +255,11 @@ function FeishuConfigActions({ controller, disabled, label = "保存修改", onS
   </div>;
 }
 
-function FeishuNameRow({ name, detail, action = "改名", editing, draft, placeholder, disabled, onEdit, onChange, onCancel, onSave, buttonRef }) {
-  const inputRef = useRef(null);
+function FeishuNameRow({ name, detail, action = "改名", editing, draft, placeholder, disabled, onEdit, onChange, onCancel, onSave, buttonRef }: {
+  name: string; detail?: string; action?: string; editing: boolean; draft: string; placeholder: string; disabled: boolean;
+  onEdit: () => void; onChange: (value: string) => void; onCancel: () => void; onSave: () => Promise<void>; buttonRef: React.Ref<HTMLButtonElement>;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (editing) { inputRef.current?.focus({ preventScroll: true }); inputRef.current?.select(); }
   }, [editing]);
@@ -254,7 +270,7 @@ function FeishuNameRow({ name, detail, action = "改名", editing, draft, placeh
         onKeyDown={event => {
           if (event.nativeEvent.isComposing) return;
           if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onCancel(); }
-          if (event.key === "Enter") { event.preventDefault(); event.stopPropagation(); onSave(); }
+          if (event.key === "Enter") { event.preventDefault(); event.stopPropagation(); void onSave(); }
         }} /> : <span className="feishu-sync--displayName">{name}</span>}
       {detail && <span className="feishu-sync--nameSource" title={detail}>{detail}</span>}
     </div>
@@ -264,14 +280,14 @@ function FeishuNameRow({ name, detail, action = "改名", editing, draft, placeh
   </li>;
 }
 
-function FeishuHierarchyEditor({ controller, disabled, onConnection, notePath, onOpenNote }) {
+function FeishuHierarchyEditor({ controller, disabled, onConnection, notePath, onOpenNote }: { controller: ConfigController; disabled: boolean; onConnection: () => void; notePath: string; onOpenNote: () => Promise<void> }) {
   const { form, change, hierarchy, busy, transferBusy, dirty } = controller;
   const [active, setActive] = useState("");
   const [query, setQuery] = useState("");
-  const [editing, setEditing] = useState(null);
+  const [editing, setEditing] = useState<NameEdit | null>(null);
   const region = useRef("feishu-hierarchy-" + Math.random().toString(36).slice(2));
-  const stageRefs = useRef({});
-  const renameRefs = useRef({});
+  const stageRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const renameRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const focusAfterEdit = useRef("");
   useEffect(() => {
     if (!editing && focusAfterEdit.current) {
@@ -281,41 +297,43 @@ function FeishuHierarchyEditor({ controller, disabled, onConnection, notePath, o
   }, [editing]);
   const stages = [
     { id: "vault", label: "仓库清单", icon: "list", title: form.vaultTasklistName || "设置清单名称", hint: "查看清单名称" },
-    { id: "areas", label: "Area 分组", icon: "layers", title: (hierarchy?.areas || []).length ? hierarchy.areas.length + " 个领域分组" : "按笔记 area 分组", hint: "查看分组" },
+    { id: "areas", label: "Area 分组", icon: "layers", title: hierarchy?.areas.length ? hierarchy.areas.length + " 个领域分组" : "按笔记 area 分组", hint: "查看分组" },
     { id: "projects", label: "项目父任务", icon: "folder-open", title: form.projectFolder || "设置项目目录", hint: "查看项目" },
     { id: "actions", label: "行动子任务", icon: "square-check", title: "笔记中的 checkbox", hint: "查看行动来源" }
   ];
-  const selectStage = id => { setActive(current => current === id ? "" : id); setQuery(""); setEditing(null); };
+  const selectStage = (id: string) => { setActive(current => current === id ? "" : id); setQuery(""); setEditing(null); };
   const finishEditing = () => {
     focusAfterEdit.current = editing?.id || "";
     setEditing(null);
   };
   const cancelEditing = () => { if (editing) change(editing.field, editing.before); finishEditing(); };
   const save = async () => { if (!dirty || await controller.operate("save")) finishEditing(); };
-  const renderName = (id, field, key, fallback, detail, action = "改名") => {
-    const value = key ? form[field][key] || "" : form[field];
+  const renderName = (id: string, field: NameField, key: string | null, fallback: string, detail: string, action = "改名") => {
+    const stored = form[field];
+    const value = typeof stored === 'string' ? stored : stored[key || ''] || "";
     const name = value || fallback || "未设置";
     return <FeishuNameRow key={id} name={name} detail={detail} action={action} disabled={!!busy || transferBusy}
       editing={editing?.id === id} draft={editing?.draft || ""} placeholder={fallback}
       buttonRef={element => { renameRefs.current[id] = element; }}
       onEdit={() => setEditing({ id, field, before: form[field], draft: value || fallback || "" })}
       onChange={text => {
-        setEditing(current => ({ ...current, draft: text }));
+        setEditing(current => current ? { ...current, draft: text } : current);
         if (key) {
-          const names = { ...form[field] };
+          const names = typeof stored === 'object' ? { ...stored } : {};
           if (!text.trim() || text.trim() === fallback) delete names[key]; else names[key] = text;
           change(field, names);
         } else change(field, text);
       }} onCancel={cancelEditing} onSave={save} />;
   };
-  const allRows = (active === "areas" ? hierarchy?.areas || [] : hierarchy?.projects || []).map(row => {
-    const sourceName = active === "areas" ? (row.key === "__unclassified__" ? "未分类" : row.key.split("/").pop().replace(/\.md$/, "")) : row.name;
-    const name = (active === "areas" ? form.areaNames[row.key] : form.projectNames[row.id]) || sourceName;
-    return { ...row, sourceName, displayName: name };
-  });
+  const allRows = active === "areas" ? (hierarchy?.areas || []).map(row => {
+    const sourceName = row.key === "__unclassified__" ? "未分类" : row.key.split("/").pop()?.replace(/\.md$/, "") || "";
+    return { key: row.key, id: row.key, path: row.key, sourceName, displayName: form.areaNames[row.key] || sourceName };
+  }) : (hierarchy?.projects || []).map(row => ({
+    key: row.id, id: row.id, path: row.path, sourceName: row.name, displayName: form.projectNames[row.id] || row.name,
+  }));
   const rows = allRows.filter(row => editing?.id === active + ":" + (row.key || row.id) || !query
     || (row.displayName + " " + (row.path || row.key)).toLocaleLowerCase().includes(query.toLocaleLowerCase()));
-  const nameCounts = new Map();
+  const nameCounts = new Map<string, number>();
   for (const row of allRows) nameCounts.set(row.displayName, (nameCounts.get(row.displayName) || 0) + 1);
   return <div className="feishu-sync--hierarchyEditor">
     <ol className="feishu-sync--levels" aria-label="查看仓库任务层级">
@@ -328,8 +346,8 @@ function FeishuHierarchyEditor({ controller, disabled, onConnection, notePath, o
         </button>
       </li>)}
     </ol>
-    {active && <section className="feishu-sync--hierarchyDetails" id={region.current} aria-label={stages.find(s => s.id === active).label}>
-      <div className="feishu-sync--sectionHead"><h4>{stages.find(s => s.id === active).label}</h4>
+    {active && <section className="feishu-sync--hierarchyDetails" id={region.current} aria-label={stages.find(s => s.id === active)?.label}>
+      <div className="feishu-sync--sectionHead"><h4>{stages.find(s => s.id === active)?.label}</h4>
         {(active === "areas" || active === "projects") && allRows.length > 10 && <input className="feishu-sync--nameSearch" type="search" value={query}
           aria-label={active === "areas" ? "查找分组" : "查找项目"} placeholder={active === "areas" ? "查找分组" : "查找项目"}
           onChange={event => setQuery(event.target.value)} />}
@@ -349,14 +367,14 @@ function FeishuHierarchyEditor({ controller, disabled, onConnection, notePath, o
         {(active === "areas" || active === "projects") && <>
           <ul className="feishu-sync--nameList feishu-sync--scrollNames">
             {rows.map(row => renderName(active + ":" + (row.key || row.id), active === "areas" ? "areaNames" : "projectNames", row.key || row.id,
-              row.sourceName, active === "projects" ? row.path : nameCounts.get(row.displayName) > 1 ? row.key
+              row.sourceName, active === "projects" ? row.path : (nameCounts.get(row.displayName) || 0) > 1 ? row.key
                 : row.displayName !== row.sourceName ? "笔记：" + row.sourceName : ""))}
           </ul>
           {!rows.length && <p className="feishu-sync--hint">{query ? "没有匹配的条目。" : "首次同步建立分组与父任务后，可在这里编辑显示名称。"}</p>}
         </>}
         {active === "actions" && <>
           <p className="feishu-sync--hint">行动标题取自笔记的 checkbox 文本。修改原笔记后，下次同步更新已有子任务。</p>
-          {notePath && <button className="feishu-sync--button" type="button" onClick={onOpenNote}><FeishuIcon name="file-pen-line" />打开所选笔记编辑行动</button>}
+          {notePath && <button className="feishu-sync--button" type="button" onClick={() => void onOpenNote()}><FeishuIcon name="file-pen-line" />打开所选笔记编辑行动</button>}
           <p className="feishu-sync--hint feishu-sync--scopeLine"><span>{form.syncDaily ? "同时同步日记：" + form.dailyFolder : "日记行动未开启"}</span>
             <button className="feishu-sync--textButton" type="button" onClick={onConnection}>设置范围</button></p>
         </>}
@@ -371,7 +389,7 @@ function FeishuHierarchyEditor({ controller, disabled, onConnection, notePath, o
   </div>;
 }
 
-function FeishuConfig({ controller, disabled }) {
+function FeishuConfig({ controller, disabled }: { controller: ConfigController; disabled: boolean }) {
   const { saved, hierarchy, form, secret, setSecret, busy, transferBusy, dirty, change, operate } = controller;
   const hierarchyReady = !!saved.hierarchyEnabled && hierarchy?.migration?.state === "ready";
   return <div className="feishu-sync--config">
@@ -416,13 +434,14 @@ function FeishuConfig({ controller, disabled }) {
     </fieldset>
     <FeishuConfigActions controller={controller} disabled={disabled} label="保存连接设置" />
     <button className="feishu-sync--button" type="button" disabled={disabled || !!busy || dirty || !saved.appId || !saved.hasSecret || !saved.assigneeId}
-      onClick={() => operate("check")}><FeishuIcon name="plug" />{busy === "check" ? "正在检查…" : "检查连接"}</button>
+      onClick={() => void operate("check")}><FeishuIcon name="plug" />{busy === "check" ? "正在检查…" : "检查连接"}</button>
     <FeishuConfigFeedback controller={controller} />
     {saved.storagePath && <details className="feishu-sync--details"><summary>本机存储位置</summary><p className="feishu-sync--hint"><code>{saved.storagePath}</code></p></details>}
   </div>;
 }
 
-function safeFeishuUrl(value) {
+function safeFeishuUrl(value: string | undefined) {
+  if (!value) return null;
   try {
     const url = new URL(value);
     return url.protocol === "https:" && !url.username && !url.password
@@ -430,18 +449,18 @@ function safeFeishuUrl(value) {
   } catch { return null; }
 }
 
-function feishuTaskHasConflict(record) {
+function feishuTaskHasConflict(record: TaskRecord | null | undefined) {
   if (!record) return false;
   if (["conflict", "remote_missing"].includes(record.state)) return true;
   return record.state === "error" && /飞书任务.*(?:未找到|不存在|已删除)|(?:未找到|找不到).*飞书任务|task[^\n]*not found|1470404/i.test(record.message || "");
 }
 
-function feishuGlobalSyncError(autoStatus) {
+function feishuGlobalSyncError(autoStatus: UiAutoStatus | null) {
   if (Array.isArray(autoStatus?.failures) && autoStatus.failures.length) return "";
   return autoStatus?.lastError || "";
 }
 
-function feishuIssueNextStep(issue) {
+function feishuIssueNextStep(issue: SyncIssue) {
   const message = issue.message || "";
   if (issue.kind === "task" && feishuTaskHasConflict(issue)) return "点击「处理冲突」，对比本仓库与飞书，再确认采用哪一侧。";
   if (issue.state === "local_missing") return "打开原笔记核对行动是否已移动或改写，再查看关联记录。";
@@ -456,7 +475,10 @@ function feishuIssueNextStep(issue) {
   return "打开笔记核对内容，并查看此项的同步状态；处理原因后再同步。";
 }
 
-function FeishuSyncIssues({ issues, loading, error, actionError, autoStatus, disabled, conflictDisabled, onView, onOpen, onConflict }) {
+function FeishuSyncIssues({ issues, loading, error, actionError, autoStatus, disabled, conflictDisabled, onView, onOpen, onConflict }: {
+  issues: SyncIssue[]; loading: boolean; error: string; actionError: string; autoStatus: UiAutoStatus | null; disabled: boolean; conflictDisabled: boolean;
+  onView: (issue: SyncIssue) => void; onOpen: (issue: SyncIssue) => Promise<void>; onConflict: (target: ConflictTarget) => Promise<void>;
+}) {
   const globalError = !issues.length && !loading && !error && feishuGlobalSyncError(autoStatus);
   if (!issues.length && !loading && !error && !globalError) return null;
   return (
@@ -478,14 +500,14 @@ function FeishuSyncIssues({ issues, loading, error, actionError, autoStatus, dis
             <strong className="feishu-sync--issueTitle">{issue.title || (issue.kind === "project" ? "未命名项目" : "未命名行动")}</strong>
             <span className="feishu-sync--status">{issue.kind === "project" ? "项目父任务" : "行动"}</span>
           </div>
-          <p className="feishu-sync--hint">笔记：{issue.path || "路径未记录"}{Number.isInteger(issue.line) ? " · 第 " + (issue.line + 1) + " 行" : ""}</p>
+          <p className="feishu-sync--hint">笔记：{issue.path || "路径未记录"}{Number.isInteger(issue.line) ? " · 第 " + ((issue.line ?? 0) + 1) + " 行" : ""}</p>
           <p className="feishu-sync--issueReason">原因：{issue.message || "同步未完成，请查看此项的关联状态。"}</p>
           <p className="feishu-sync--hint">下一步：{feishuIssueNextStep(issue)}</p>
           <div className="feishu-sync--actions">
-            <button className="feishu-sync--button" type="button" disabled={!issue.path} onClick={() => onOpen(issue)}>打开笔记</button>
+            <button className="feishu-sync--button" type="button" disabled={!issue.path} onClick={() => void onOpen(issue)}>打开笔记</button>
             <button className="feishu-sync--button" type="button" disabled={disabled || !issue.path} onClick={() => onView(issue)}>查看此项</button>
             {issue.kind === "task" && feishuTaskHasConflict(issue) && <button className="feishu-sync--button" type="button"
-              disabled={disabled || conflictDisabled || !issue.id} onClick={() => onConflict(issue)}>处理冲突</button>}
+              disabled={disabled || conflictDisabled || !issue.id} onClick={() => { if (issue.id) void onConflict({ id: issue.id, path: issue.path, title: issue.title }); }}>处理冲突</button>}
             {url && <a className="feishu-sync--link" href={url} target="_blank" rel="noopener noreferrer">在飞书查看 ↗</a>}
           </div>
         </li>;
@@ -494,12 +516,15 @@ function FeishuSyncIssues({ issues, loading, error, actionError, autoStatus, dis
   );
 }
 
-function FeishuTaskConflict({ conflict, disabled, panelRef, onChoose, onReload, onConfirm, onCancel }) {
+function FeishuTaskConflict({ conflict, disabled, panelRef, onChoose, onReload, onConfirm, onCancel }: {
+  conflict: ConflictState; disabled: boolean; panelRef: React.Ref<HTMLElement>; onChoose: (choice: ConflictChoice) => void;
+  onReload: () => Promise<void>; onConfirm: () => Promise<void>; onCancel: () => void;
+}) {
   const preview = conflict.preview;
   const loading = conflict.phase === "loading";
   const resolving = conflict.phase === "resolving";
   const pending = loading || resolving;
-  const statusText = value => typeof value === "boolean" ? value ? "已完成" : "未完成" : "未记录";
+  const statusText = (value: boolean | undefined) => typeof value === "boolean" ? value ? "已完成" : "未完成" : "未记录";
   return (
     <section className="feishu-sync--conflict" aria-label="行动冲突对比" aria-busy={pending} ref={panelRef} tabIndex={-1}>
       <div className="feishu-sync--taskTop">
@@ -515,7 +540,7 @@ function FeishuTaskConflict({ conflict, disabled, panelRef, onChoose, onReload, 
         <fieldset className="feishu-sync--fieldset feishu-sync--conflictChoices" disabled={disabled || pending}>
           <legend className="feishu-sync--hint">选择采用哪一侧（确认前不会修改）</legend>
           <div className="feishu-sync--conflictSides">
-            {["local", "remote"].map(side => {
+            {(["local", "remote"] as const).map(side => {
               const value = preview[side];
               const missing = side === "remote" && !value.exists;
               const selected = conflict.choice === side;
@@ -538,10 +563,10 @@ function FeishuTaskConflict({ conflict, disabled, panelRef, onChoose, onReload, 
         {conflict.choice && <p className="feishu-sync--notice" role="status">确认后：{preview.choices[conflict.choice]}</p>}
       </>}
       <div className="feishu-sync--actions">
-        <button className="feishu-sync--button feishu-sync--primary" type="button" disabled={disabled || pending || !preview || !conflict.choice} onClick={onConfirm}>
+        <button className="feishu-sync--button feishu-sync--primary" type="button" disabled={disabled || pending || !preview || !conflict.choice} onClick={() => void onConfirm()}>
           {resolving ? "正在处理…" : conflict.choice ? "确认采用" + (conflict.choice === "local" ? "本仓库" : "飞书") : "先选择采用哪一侧"}
         </button>
-        <button className="feishu-sync--button" type="button" disabled={disabled || pending} onClick={onReload}>重新读取对比</button>
+        <button className="feishu-sync--button" type="button" disabled={disabled || pending} onClick={() => void onReload()}>重新读取对比</button>
         <button className="feishu-sync--button" type="button" disabled={resolving} onClick={onCancel}>取消</button>
       </div>
       {!pending && !preview && <p className="feishu-sync--hint">读取成功后才能选择。请按提示处理原因，再重新读取对比。</p>}
@@ -549,10 +574,14 @@ function FeishuTaskConflict({ conflict, disabled, panelRef, onChoose, onReload, 
   );
 }
 
-function FeishuAction({ task, isProject, disabled, sendDisabled, highlighted, onSend, onSync, onRecover, onConflict }) {
+function FeishuAction({ task, isProject, disabled, sendDisabled, highlighted, onSend, onSync, onRecover, onConflict }: {
+  task: Action; isProject: boolean; disabled: boolean; sendDisabled: boolean; highlighted: boolean;
+  onSend: (task: Action) => void; onSync: (id: string) => Promise<void>; onRecover: (id: string, guid: string) => Promise<void>;
+  onConflict: (target: ConflictTarget) => Promise<void>;
+}) {
   const [recoveryGuid, setRecoveryGuid] = useState("");
   const record = task.record;
-  const id = task.id || (record && record.id);
+  const id = task.id || record?.id;
   const linked = !!(record && record.guid);
   const unknown = record && !record.guid && ["uncertain", "creating", "unknown"].includes(record.state);
   const conflict = feishuTaskHasConflict(record);
@@ -560,7 +589,7 @@ function FeishuAction({ task, isProject, disabled, sendDisabled, highlighted, on
   const foreign = record && record.state === "foreign";
   const regular = /^[ xX]$/.test(task.status);
   const url = record && safeFeishuUrl(record.url);
-  const stateNames = {
+  const stateNames: Record<string, string> = {
     synced: "已同步", syncing: "同步中", linked: "已关联", ready: "已关联", creating: "创建结果待确认", uncertain: "创建结果待确认",
     unknown: "创建结果待确认", conflict: "状态冲突", failed: "同步失败", error: "同步失败", missing: "飞书任务未找到",
     remote_missing: "飞书任务未找到", local_missing: "本地行动未找到", pending: "等待同步", draft: "尚未发送", untracked: "需恢复关联", foreign: "来自其他仓库", suppressed: "已取消 · 已停止同步"
@@ -575,9 +604,9 @@ function FeishuAction({ task, isProject, disabled, sendDisabled, highlighted, on
       {record && record.message && <p className={conflict || unknown ? "feishu-sync--notice" : "feishu-sync--hint"}>{record.message}</p>}
       <div className="feishu-sync--actions">
         {!linked && !unknown && !foreign && !suppressed && <button className="feishu-sync--button" type="button" disabled={disabled || sendDisabled || !regular} onClick={() => onSend(task)}>{record && record.state === "draft" ? "重试发送" : id ? "查找已有任务" : isProject ? "发为子任务" : "发到飞书"}</button>}
-        {linked && !foreign && !conflict && !suppressed && <button className="feishu-sync--button" type="button" disabled={disabled || !id || (!regular && !record.cancelPending)} onClick={() => onSync(id)}>{record.cancelPending ? "重试确认取消" : "同步状态"}</button>}
+        {linked && !foreign && !conflict && !suppressed && <button className="feishu-sync--button" type="button" disabled={disabled || !id || (!regular && !record.cancelPending)} onClick={() => { if (id) void onSync(id); }}>{record.cancelPending ? "重试确认取消" : "同步状态"}</button>}
         {url && <a className="feishu-sync--link" href={url} target="_blank" rel="noopener noreferrer">在飞书打开 ↗</a>}
-        {conflict && <button className="feishu-sync--button" type="button" disabled={disabled || !id} onClick={() => onConflict({ id, path: task.path || record.path, title: task.text })}>处理冲突</button>}
+        {conflict && <button className="feishu-sync--button" type="button" disabled={disabled || !id} onClick={() => { if (id) void onConflict({ id, path: task.path || record?.path || "", title: task.text }); }}>处理冲突</button>}
       </div>
       {conflict && <p className="feishu-sync--hint">点击「处理冲突」查看两侧版本，选择后还需确认。</p>}
       {suppressed && <p className="feishu-sync--hint">已采用飞书结果，行动文本保留。如需恢复同步，先在笔记中重新打开此行动，再处理冲突。</p>}
@@ -587,21 +616,21 @@ function FeishuAction({ task, isProject, disabled, sendDisabled, highlighted, on
       {unknown && <div className="feishu-sync--recovery">
         <p className="feishu-sync--hint">创建结果待确认，已暂停重复创建。先尝试同步查询；仍未恢复时，在飞书找到该任务，从分享链接取得 GUID 后绑定。不要删除本机记录重试。</p>
         <div className="feishu-sync--actions">
-          <button className="feishu-sync--button" type="button" disabled={disabled || !id} onClick={() => onSync(id)}>查询并恢复关联</button>
+          <button className="feishu-sync--button" type="button" disabled={disabled || !id} onClick={() => { if (id) void onSync(id); }}>查询并恢复关联</button>
         </div>
         <label className="feishu-sync--label">恢复已有任务 GUID
           <input className="feishu-sync--input" type="text" value={recoveryGuid} disabled={disabled} spellCheck={false}
             placeholder="从该任务分享链接复制 GUID" onChange={event => setRecoveryGuid(event.target.value)} />
         </label>
-        <button className="feishu-sync--button" type="button" disabled={disabled || !id || !recoveryGuid.trim()} onClick={() => onRecover(id, recoveryGuid.trim())}>校验并恢复任务</button>
+        <button className="feishu-sync--button" type="button" disabled={disabled || !id || !recoveryGuid.trim()} onClick={() => { if (id) void onRecover(id, recoveryGuid.trim()); }}>校验并恢复任务</button>
       </div>}
     </li>
   );
 }
 
-function FeishuResourceRecovery({ resource, disabled, onRecover }) {
+function FeishuResourceRecovery({ resource, disabled, onRecover }: { resource: ResourceRecovery; disabled: boolean; onRecover: (input: RecoveryInput) => Promise<void> }) {
   const [guid, setGuid] = useState("");
-  const labels = { vaultList: "仓库清单", statusField: "项目状态字段", section: "area 分组" };
+  const labels: Record<string, string> = { vaultList: "仓库清单", statusField: "项目状态字段", section: "area 分组" };
   const supported = Object.prototype.hasOwnProperty.call(labels, resource.kind);
   return (
     <div className="feishu-sync--recovery">
@@ -613,59 +642,62 @@ function FeishuResourceRecovery({ resource, disabled, onRecover }) {
           placeholder="粘贴刚才创建的远端资源 GUID" onChange={event => setGuid(event.target.value)} />
       </label>
       <button className="feishu-sync--button" type="button" disabled={disabled || !supported || !guid.trim()}
-        onClick={() => onRecover({ kind: resource.kind, key: resource.key, guid: guid.trim() })}>校验并恢复关联</button>
+        onClick={() => void onRecover({ kind: resource.kind, key: resource.key, guid: guid.trim() })}>校验并恢复关联</button>
     </div>
   );
 }
 
-function App({ navigation }) {
+function App({ navigation }: { navigation?: Navigation }) {
   const { plugin } = useRuntime();
   const runtimePlugin = plugin;
   const app = useObsidianApp();
   const { getData, saveData } = useDataStorage();
-  const [service, setService] = useState(null);
-  const [config, setConfig] = useState(null);
+  const [service, setService] = useState<FeishuService | null>(null);
+  const [config, setConfig] = useState<Partial<SyncConfig> | null>(null);
   const [configDirty, setConfigDirty] = useState(false);
   const [configBusy, setConfigBusy] = useState(false);
-  const [section, setSection] = useState(() => ["overview", "notes", "connection", "transfer", "help"].includes((getData() || {}).activeSection) ? getData().activeSection : "overview");
-  const [files, setFiles] = useState([]);
+  const [section, setSection] = useState(() => {
+    const saved = getData().activeSection;
+    return saved && SECTIONS.includes(saved) ? saved : "overview";
+  });
+  const [files, setFiles] = useState<string[]>([]);
   const [candidate, setCandidate] = useState("");
   const [path, setPath] = useState("");
-  const [selectedLine, setSelectedLine] = useState(null);
-  const [selectedTaskId, setSelectedTaskId] = useState(null);
-  const [note, setNote] = useState(null);
+  const [selectedLine, setSelectedLine] = useState<number | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [note, setNote] = useState<NoteSnapshot | null>(null);
   const [reading, setReading] = useState(false);
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [due, setDue] = useState("");
   const [reminder, setReminder] = useState("");
-  const [hierarchy, setHierarchy] = useState(null);
-  const [autoStatus, setAutoStatus] = useState(null);
-  const [syncIssues, setSyncIssues] = useState([]);
+  const [hierarchy, setHierarchy] = useState<HierarchyStatus | null>(null);
+  const [autoStatus, setAutoStatus] = useState<UiAutoStatus | null>(null);
+  const [syncIssues, setSyncIssues] = useState<SyncIssue[]>([]);
   const [issuesLoading, setIssuesLoading] = useState(true);
   const [issuesError, setIssuesError] = useState("");
   const [issueActionError, setIssueActionError] = useState("");
-  const [conflict, setConflict] = useState(null);
+  const [conflict, setConflict] = useState<ConflictState | null>(null);
   const [conflictMessage, setConflictMessage] = useState("");
-  const [scopePreview, setScopePreview] = useState(null);
+  const [scopePreview, setScopePreview] = useState<ScopePreview | null>(null);
   const alive = useRef(true);
-  const serviceRef = useRef(null);
+  const serviceRef = useRef<FeishuService | null>(null);
   const currentPath = useRef("");
   const busyRef = useRef(false);
-  const configRef = useRef({ saved: null, dirty: false, busy: false });
+  const configRef = useRef<{ saved: Partial<SyncConfig> | null; dirty: boolean; busy: boolean }>({ saved: null, dirty: false, busy: false });
   const selectionVersion = useRef(0);
   const requestVersion = useRef(0);
   const issuesVersion = useRef(0);
   const conflictVersion = useRef(0);
   const conflictScope = useRef("");
-  const conflictPanelRef = useRef(null);
-  const refreshIssuesRef = useRef(null);
-  const noteRef = useRef(null);
+  const conflictPanelRef = useRef<HTMLElement>(null);
+  const refreshIssuesRef = useRef<(() => void) | null>(null);
+  const noteRef = useRef<HTMLElement>(null);
   const focusIssue = useRef(false);
   const listId = useRef("feishu-sync-notes-" + Math.random().toString(36).slice(2));
 
-  const updateConflictScope = useCallback(saved => {
+  const updateConflictScope = useCallback((saved: Partial<SyncConfig>) => {
     const nextScope = JSON.stringify([saved?.appId || "", saved?.vaultId || "", saved?.assigneeId || ""]);
     if (conflictScope.current && conflictScope.current !== nextScope) {
       conflictVersion.current += 1;
@@ -678,7 +710,7 @@ function App({ navigation }) {
   const refreshHierarchy = useCallback(() => {
     if (!alive.current || !serviceRef.current) return;
     try { setHierarchy(readFeishuHierarchy(serviceRef.current)); }
-    catch (failure) { setError(failure.message || "读取仓库层级状态失败。"); }
+    catch (failure) { setError(errorMessage(failure) || "读取仓库层级状态失败。"); }
   }, []);
 
   const refresh = useCallback(async () => {
@@ -693,7 +725,7 @@ function App({ navigation }) {
     } catch (failure) {
       if (alive.current && version === requestVersion.current && target === currentPath.current) {
         setNote(null);
-        setError(failure.message || "读取行动失败，请刷新后重试。");
+        setError(errorMessage(failure) || "读取行动失败，请刷新后重试。");
       }
     } finally {
       if (alive.current && version === requestVersion.current) setReading(false);
@@ -702,11 +734,11 @@ function App({ navigation }) {
 
   useEffect(() => {
     alive.current = true;
-    const workspaceRefs = [];
-    const vaultRefs = [];
-    let issuesTimer = null;
-    let metadataRef = null;
-    let filesTimer = null;
+    const workspaceRefs: Obsidian.EventRef[] = [];
+    const vaultRefs: Obsidian.EventRef[] = [];
+    let issuesTimer: number | undefined;
+    let metadataRef: Obsidian.EventRef | null = null;
+    let filesTimer: number | undefined;
     try {
       const api = plugin.service;
       if (!api) throw new Error("飞书同步服务未加载，请重新启用插件。");
@@ -718,7 +750,7 @@ function App({ navigation }) {
       configRef.current.saved = nextConfig;
       setConfig(nextConfig);
       if (!nextConfig.appId || !nextConfig.hasSecret || !nextConfig.assigneeId) setSection("connection");
-      const chooseSelection = selection => {
+      const chooseSelection = (selection: Selection | null) => {
         if (!alive.current) return;
         const nextPath = selection && selection.path || "";
         currentPath.current = nextPath;
@@ -726,7 +758,7 @@ function App({ navigation }) {
         requestVersion.current += 1;
         setPath(nextPath);
         setCandidate(nextPath);
-        const nextLine = selection && Number.isInteger(selection.line) ? selection.line : null;
+        const nextLine = selection && Number.isInteger(selection.line) ? selection.line ?? null : null;
         setSelectedLine(nextLine);
         focusIssue.current = nextLine !== null;
         setSelectedTaskId(null);
@@ -734,20 +766,20 @@ function App({ navigation }) {
         setReading(false);
         setError("");
         setMessage("");
-        if (nextPath) { setSection("notes"); refresh(); }
+        if (nextPath) { setSection("notes"); void refresh(); }
       };
       let filesVersion = 0;
       const refreshFiles = () => {
         const version = ++filesVersion;
         window.clearTimeout(filesTimer);
-        filesTimer = window.setTimeout(async () => {
+        filesTimer = window.setTimeout(() => { void (async () => {
           try {
             const paths = await api.listNotes();
             if (alive.current && version === filesVersion) setFiles(paths.sort((a, b) => a.localeCompare(b, "zh-CN")));
-          } catch (failure) { if (alive.current && version === filesVersion) setError(failure.message); }
-        }, 150);
+          } catch (failure) { if (alive.current && version === filesVersion) setError(errorMessage(failure)); }
+        })(); }, 150);
       };
-      const updateAutoStatus = status => {
+      const updateAutoStatus = (status?: AutoStatus) => {
         if (!alive.current) return;
         const plugin = runtimePlugin;
         try {
@@ -759,11 +791,11 @@ function App({ navigation }) {
           refreshIssues([]);
         }
       };
-      const refreshIssues = failures => {
+      const refreshIssues = (failures?: SyncFailure[]) => {
         const version = ++issuesVersion.current;
         window.clearTimeout(issuesTimer);
         setIssuesLoading(true);
-        issuesTimer = window.setTimeout(async () => {
+        issuesTimer = window.setTimeout(() => { void (async () => {
           try {
             if (typeof api.getSyncIssues !== "function") throw new Error("当前服务尚未提供异常详情，请重新启动 Obsidian 后再查看。");
             const issues = await api.getSyncIssues(Array.isArray(failures) ? failures : []);
@@ -772,11 +804,11 @@ function App({ navigation }) {
             setIssuesError("");
           } catch (failure) {
             if (!alive.current || version !== issuesVersion.current) return;
-            setIssuesError(failure.message || "读取同步异常失败，请稍后重试。");
+            setIssuesError(errorMessage(failure) || "读取同步异常失败，请稍后重试。");
           } finally {
             if (alive.current && version === issuesVersion.current) setIssuesLoading(false);
           }
-        }, 120);
+        })(); }, 120);
       };
       refreshIssuesRef.current = () => updateAutoStatus();
       workspaceRefs.push(app.workspace.on("feishu-sync:selection", chooseSelection));
@@ -787,21 +819,22 @@ function App({ navigation }) {
         setScopePreview(null);
         updateAutoStatus();
         refreshHierarchy();
-        refresh();
+        void refresh();
       }));
       workspaceRefs.push(app.workspace.on("feishu-sync:auto-status", updateAutoStatus));
-      vaultRefs.push(app.vault.on("modify", file => { refreshFiles(); if (file.path === currentPath.current) refresh(); }));
+      vaultRefs.push(app.vault.on("modify", file => { refreshFiles(); if (file.path === currentPath.current) void refresh(); }));
       if (app.metadataCache?.on) metadataRef = app.metadataCache.on("changed", refreshFiles);
-      ["create", "delete", "rename"].forEach(event => vaultRefs.push(app.vault.on(event, (file, oldPath) => {
+      const changed = (file: Obsidian.TAbstractFile, oldPath?: string) => {
         refreshFiles();
-        if (file.path === currentPath.current || oldPath === currentPath.current) refresh();
-      })));
+        if (file.path === currentPath.current || oldPath === currentPath.current) void refresh();
+      };
+      vaultRefs.push(app.vault.on("create", changed), app.vault.on("delete", changed), app.vault.on("rename", changed));
       refreshFiles();
       updateAutoStatus();
       chooseSelection(api.getSelection());
     } catch (failure) {
       setIssuesLoading(false);
-      setError(failure.message || "飞书同步服务加载失败，请重新启用插件。");
+      setError(errorMessage(failure) || "飞书同步服务加载失败，请重新启用插件。");
     }
     return () => {
       alive.current = false;
@@ -825,7 +858,7 @@ function App({ navigation }) {
   useEffect(() => {
     if (!note || reading || !focusIssue.current || !noteRef.current) return;
     focusIssue.current = false;
-    const target = noteRef.current.querySelector(".feishu-sync--selected") || noteRef.current;
+    const target = noteRef.current.querySelector<HTMLElement>(".feishu-sync--selected") || noteRef.current;
     target.scrollIntoView({ block: "nearest" });
     target.focus({ preventScroll: true });
   }, [note, reading, selectedTaskId, selectedLine]);
@@ -836,14 +869,14 @@ function App({ navigation }) {
     conflictPanelRef.current.focus({ preventScroll: true });
   }, [conflict?.target.id]);
 
-  const onConfigState = useCallback(value => {
+  const onConfigState = useCallback((value: ConfigState) => {
     updateConflictScope(value.saved);
     configRef.current.saved = value.saved;
     configRef.current.dirty = value.dirty;
     setConfig(value.saved);
     setConfigDirty(value.dirty);
   }, [updateConflictScope]);
-  const onConfigBusy = useCallback(value => {
+  const onConfigBusy = useCallback((value: boolean) => {
     configRef.current.busy = value;
     setConfigBusy(value);
   }, []);
@@ -860,7 +893,7 @@ function App({ navigation }) {
   const projectActionCount = tasks.filter(task => /^[ xX]$/.test(task.status)).length;
   const parentRecord = note?.projectRecord || null;
   const parentUrl = parentRecord && safeFeishuUrl(parentRecord.url);
-  const resourceStates = { linked: "已关联", syncing: "同步中", error: "同步失败，需处理", conflict: "状态冲突",
+  const resourceStates: Record<string, string> = { linked: "已关联", syncing: "同步中", error: "同步失败，需处理", conflict: "状态冲突",
     uncertain: "创建结果待确认", creating: "创建结果待确认", retryable: "可重试", pending: "待同步" };
   const parentStateLabel = parentRecord ? resourceStates[parentRecord.state] || (parentRecord.guid ? "已关联" : "待同步") : "尚未创建";
   const parentStatusConflict = parentRecord?.state === "error" && /状态|重新打开/.test(parentRecord.message || "");
@@ -869,11 +902,15 @@ function App({ navigation }) {
   const archivePending = Number(hierarchy?.migration?.archivePending ?? hierarchy?.migration?.legacyProjects ?? 0);
   const recoveries = Array.isArray(hierarchy?.recoveries) ? hierarchy.recoveries : [];
   const hasLegacyRecords = Number(hierarchy?.migration?.legacyProjects || 0) + Number(hierarchy?.migration?.legacyTasks || 0) > 0;
-  const projectStatusNames = { todo: "待办", doing: "进行中", done: "已完成", canceled: "已取消" };
+  const projectStatusNames: Record<string, string> = { todo: "待办", doing: "进行中", done: "已完成", canceled: "已取消" };
   const migrationState = hierarchy?.migration?.state || "legacy";
   const migrationLabel = hierarchyReady ? "层级已就绪" : migrationState === "migrating" ? "迁移未完成，可继续" : "等待启用或迁移";
   const migrationButton = migrationState === "migrating" ? "继续迁移" : Number(hierarchy?.migration?.legacyProjects || 0) + Number(hierarchy?.migration?.legacyTasks || 0) > 0 ? "迁移旧记录并启用新层级" : "启用仓库层级";
-  const run = async (label, operation, success, requireCredentials = true) => {
+  const requireService = () => {
+    if (!service) throw new Error("飞书同步服务未加载，请重新启用插件。");
+    return service;
+  };
+  const run = async <T,>(label: string, operation: () => T | Promise<T>, success?: string | ((result: T) => string), requireCredentials = true) => {
     const connection = configRef.current;
     if (!service || busyRef.current || connection.busy || connection.dirty || !connection.saved
       || (requireCredentials && (!connection.saved.appId || !connection.saved.hasSecret || !connection.saved.assigneeId))) return;
@@ -888,7 +925,7 @@ function App({ navigation }) {
         if (success) setMessage(typeof success === "function" ? success(result) : success);
       }
     } catch (failure) {
-      if (alive.current && selectionVersion.current === version) setError(failure.message || "操作失败，请检查配置和行动状态后重试。");
+      if (alive.current && selectionVersion.current === version) setError(errorMessage(failure) || "操作失败，请检查配置和行动状态后重试。");
     } finally {
       refreshHierarchy();
       if (alive.current && selectionVersion.current === version) await refresh();
@@ -904,13 +941,13 @@ function App({ navigation }) {
     if (!connection.saved?.appId || !connection.saved.hasSecret || !connection.saved.assigneeId) return "请先填写并保存飞书账号配置。";
     return "";
   };
-  const readConflict = async target => {
+  const readConflict = async (target: ConflictTarget) => {
     const unavailable = conflictUnavailable();
     if (busyRef.current) return;
     const version = ++conflictVersion.current;
     setConflictMessage("");
     setConflict({ target, preview: null, choice: "", phase: unavailable ? "" : "loading", error: unavailable });
-    if (unavailable) return;
+    if (unavailable || !service) return;
     busyRef.current = true;
     setBusy("读取冲突对比");
     try {
@@ -923,7 +960,7 @@ function App({ navigation }) {
       }
       if (alive.current && version === conflictVersion.current) setConflict({ target, preview, choice: "", phase: "", error: "" });
     } catch (failure) {
-      if (alive.current && version === conflictVersion.current) setConflict({ target, preview: null, choice: "", phase: "", error: failure.message || "读取冲突失败，请稍后重试。" });
+      if (alive.current && version === conflictVersion.current) setConflict({ target, preview: null, choice: "", phase: "", error: errorMessage(failure) || "读取冲突失败，请稍后重试。" });
     } finally {
       busyRef.current = false;
       if (alive.current) setBusy("");
@@ -931,16 +968,16 @@ function App({ navigation }) {
   };
   const confirmConflict = async () => {
     const snapshot = conflict;
-    if (!snapshot?.preview || !["local", "remote"].includes(snapshot.choice) || busyRef.current) return;
+    if (!snapshot?.preview || (snapshot.choice !== "local" && snapshot.choice !== "remote") || busyRef.current) return;
     const unavailable = conflictUnavailable();
-    if (unavailable) {
+    if (unavailable || !service) {
       setConflict(current => current ? { ...current, error: unavailable } : current);
       return;
     }
     const version = ++conflictVersion.current;
     busyRef.current = true;
     setBusy("处理冲突");
-    setConflict(current => ({ ...current, phase: "resolving", error: "" }));
+    setConflict(current => current ? { ...current, phase: "resolving", error: "" } : current);
     try {
       const result = await service.resolveTaskConflict(snapshot.target.id, snapshot.choice, snapshot.preview.token);
       if (!result || result.cancelPending || ["conflict", "remote_missing", "error", "uncertain", "creating"].includes(result.state)) {
@@ -952,7 +989,7 @@ function App({ navigation }) {
       }
     } catch (failure) {
       if (alive.current && version === conflictVersion.current) setConflict({ target: snapshot.target, preview: null, choice: "", phase: "",
-        error: failure.code === "CONFLICT_STALE" ? "两侧状态已变化，刚才的选择已清除。请重新读取对比后再确认。" : failure.message || "处理失败，请重新读取两侧状态后重试。" });
+        error: errorCode(failure) === "CONFLICT_STALE" ? "两侧状态已变化，刚才的选择已清除。请重新读取对比后再确认。" : errorMessage(failure) || "处理失败，请重新读取两侧状态后重试。" });
     } finally {
       refreshHierarchy();
       refreshIssuesRef.current?.();
@@ -966,15 +1003,15 @@ function App({ navigation }) {
     conflictVersion.current += 1;
     setConflict(null);
   };
-  const choose = event => {
+  const choose = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!service || busyRef.current || configRef.current.busy) return;
     const nextPath = candidate.trim();
     if (!files.includes(nextPath)) { setError("请从候选项选择完整的 Markdown 笔记路径。"); return; }
     try { service.select(nextPath); }
-    catch (failure) { setError(failure.message || "选择笔记失败。"); }
+    catch (failure) { setError(errorMessage(failure) || "选择笔记失败。"); }
   };
-  const viewIssue = issue => {
+  const viewIssue = (issue: SyncIssue) => {
     if (!service || busyRef.current || configRef.current.busy) return;
     setIssueActionError("");
     try {
@@ -983,22 +1020,22 @@ function App({ navigation }) {
       setSelectedTaskId(issue.kind === "task" ? issue.id || null : null);
     } catch (failure) {
       focusIssue.current = false;
-      setIssueActionError(failure.message || "无法查看此项，请检查笔记是否仍在原路径。");
+      setIssueActionError(errorMessage(failure) || "无法查看此项，请检查笔记是否仍在原路径。");
     }
   };
-  const openIssueNote = async issue => {
+  const openIssueNote = async (issue: SyncIssue) => {
     setIssueActionError("");
     try {
       const file = app.vault.getAbstractFileByPath(issue.path);
-      if (!file || file.extension !== "md") throw new Error("原笔记未找到，请核对它是否已移动或改名：" + issue.path);
+      if (!(file instanceof Obsidian.TFile) || file.extension !== "md") throw new Error("原笔记未找到，请核对它是否已移动或改名：" + issue.path);
       const options = Number.isInteger(issue.line) ? { eState: { line: issue.line } } : {};
       await app.workspace.getLeaf("tab").openFile(file, options);
     } catch (failure) {
-      if (alive.current) setIssueActionError(failure.message || "打开笔记失败，请检查原路径。");
+      if (alive.current) setIssueActionError(errorMessage(failure) || "打开笔记失败，请检查原路径。");
     }
   };
-  const send = task => {
-    const options = {};
+  const send = (task: Action) => {
+    const options: TaskOptions = {};
     if (due) {
       const timestamp = new Date(due + "+08:00").getTime();
       if (!Number.isFinite(timestamp) || timestamp <= Date.now()) { setError("截止时间应是有效的未来时间。"); return; }
@@ -1009,11 +1046,11 @@ function App({ navigation }) {
       if (!due || !Number.isInteger(minutes) || minutes < 1 || minutes > 40320) { setError("提醒需先设置截止时间，提前分钟数应为 1-40320 的整数。"); return; }
       options.reminderMinutes = minutes;
     }
-    run("发送行动", () => service.sendTask(task, options), "行动已发送到飞书。可在手机完成，再回此面板同步。");
+    void run("发送行动", () => requireService().sendTask(task, options), "行动已发送到飞书。可在手机完成，再回此面板同步。");
   };
-  const sync = id => run("同步行动", () => service.syncTask(id), result =>
+  const sync = (id: string) => run("同步行动", () => requireService().syncTask(id), result =>
     result && feishuTaskHasConflict(result) ? "此行动存在冲突，请点击「处理冲突」查看两侧版本。" : "已检查此行动。请查看下方同步状态。");
-  const batchMessage = result => {
+  const batchMessage = (result: SyncResult) => {
     const failures = (result && result.results || []).filter(item => item && item.ok === false);
     const summary = "本次成功 " + Number(result && result.synced || 0) + " 条，失败 " + Number(result && result.failed || 0) + " 条，跳过 " + Number(result && result.skipped || 0) + " 条。";
     const details = failures.slice(0, 5).map(item => {
@@ -1026,14 +1063,14 @@ function App({ navigation }) {
   };
   const syncVault = () => run("同步此仓库", () => {
     const plugin = runtimePlugin;
-    return plugin?.syncNow ? plugin.syncNow() : service.syncVault({ automatic: false });
+    return plugin?.syncNow ? plugin.syncNow() : requireService().syncVault({ automatic: false });
   }, batchMessage);
-  const migrateVault = () => run("启用或迁移仓库层级", () => service.migrateVault(), result => {
+  const migrateVault = () => run("启用或迁移仓库层级", () => requireService().migrateVault(), result => {
     const status = readFeishuHierarchy(service);
     return (status?.migration?.state === "ready" ? "仓库层级已就绪。自动同步仍保持关闭，可在配置中手动开启。\n" : "迁移尚未完成，请查看状态并处理问题后继续。\n") + batchMessage(result);
   });
   const previewVault = () => run("预览同步范围", async () => {
-    const result = await service.previewVault();
+    const result = await requireService().previewVault();
     if (alive.current) setScopePreview(result);
     return result;
   }, "已读取本地范围，未修改笔记或飞书。", false);
@@ -1051,7 +1088,7 @@ function App({ navigation }) {
         {[["overview", "同步概览", "layout-dashboard"], ["notes", "行动检查", "square-check"], ["connection", "连接设置", "plug"],
           ["transfer", "跨设备接入", "monitor-smartphone"], ["help", "使用帮助", "circle-help"]].map(([key, label, icon]) =>
           <button key={key} className="feishu-sync--navButton" type="button" aria-current={section === key ? "page" : undefined}
-            onClick={() => { setSection(key); saveData({ ...(getData() || {}), activeSection: key }); }}><FeishuIcon name={icon} />{label}</button>)}
+            onClick={() => { setSection(key); void saveData({ ...(getData() || {}), activeSection: key }); }}><FeishuIcon name={icon} />{label}</button>)}
       </nav>
       {error && <p className="feishu-sync--error" role="alert">{error}</p>}
       {message && <p className="feishu-sync--message" role="status">{message}</p>}
@@ -1062,7 +1099,7 @@ function App({ navigation }) {
           <span className="feishu-sync--status" role="status">{hierarchy ? migrationLabel : "状态待加载"}</span>
         </div>
         <FeishuHierarchyEditor controller={configEditor} disabled={blocked} onConnection={() => setSection("connection")}
-          notePath={path} onOpenNote={() => app.workspace.openLinkText(path, "", false)} />
+          notePath={path} onOpenNote={() => app.workspace.openLinkText(path, "", false).catch(error => plugin.report(error))} />
         <div className="feishu-sync--connectionLine">
           <FeishuIcon name={hierarchy?.vaultList?.guid ? "link-2" : "unlink"} />
           <span>{hierarchy?.vaultList?.guid ? "已关联飞书清单" : "等待建立仓库清单"}</span>
@@ -1077,7 +1114,7 @@ function App({ navigation }) {
           <div className="feishu-sync--actions">
             <button className="feishu-sync--button" type="button"
               disabled={blocked || configDirty || !configured || !!config?.autoEnabled || typeof service?.finalizeMigration !== "function"}
-              onClick={() => run("核验并移出旧项目清单", () => service.finalizeMigration(), batchMessage)}>核验并移出旧项目清单</button>
+              onClick={() => void run("核验并移出旧项目清单", () => requireService().finalizeMigration(), batchMessage)}>核验并移出旧项目清单</button>
           </div>
           <p className="feishu-sync--hint">逐条核验新父任务、分组与完成状态后，将已管理行动移出旧项目清单。此操作不归档清单，也不删除任务。</p>
           {config?.autoEnabled && <p className="feishu-sync--hint">请先关闭自动同步并保存，再核验旧清单关联。</p>}
@@ -1088,7 +1125,7 @@ function App({ navigation }) {
           <p className="feishu-sync--notice">以下资源创建结果待确认，已停止重复创建。{config?.autoEnabled ? "先关闭自动同步并保存，再恢复关联。" : "恢复后可继续迁移。"}</p>
           {recoveries.map(resource => <FeishuResourceRecovery key={resource.kind + ":" + (resource.key || "")}
             resource={resource} disabled={blocked || configDirty || !configured || !!config?.autoEnabled || typeof service?.recoverHierarchyResource !== "function"}
-            onRecover={options => run("恢复层级资源关联", () => service.recoverHierarchyResource(options), "已校验并恢复资源关联。请继续迁移，完成后再手动开启自动同步。")} />)}
+            onRecover={options => run("恢复层级资源关联", () => requireService().recoverHierarchyResource(options), "已校验并恢复资源关联。请继续迁移，完成后再手动开启自动同步。")} />)}
         </section>}
         {!hierarchyReady && <div className="feishu-sync--migration">
           <p className="feishu-sync--notice">{migrationState === "migrating" ? "迁移尚未完成，自动同步暂不可开启。处理下方提示后继续迁移。" : "先启用新层级；有旧记录时将进入迁移流程。迁移完成后再手动开启自动同步。"}</p>
@@ -1097,7 +1134,7 @@ function App({ navigation }) {
           {config?.autoEnabled && <p className="feishu-sync--notice">请先在连接设置关闭自动同步并保存，再开始或继续迁移。</p>}
           <button className="feishu-sync--button feishu-sync--primary" type="button"
             disabled={blocked || configDirty || !configured || !!config?.autoEnabled || !hierarchy || typeof service?.migrateVault !== "function"}
-            onClick={migrateVault}>{migrationButton}</button>
+            onClick={() => void migrateVault()}>{migrationButton}</button>
         </div>}
       </section>
       <section className="feishu-sync--automation" aria-label="当前仓库同步状态">
@@ -1112,9 +1149,9 @@ function App({ navigation }) {
         </dl>
         <div className="feishu-sync--actions">
           <button className="feishu-sync--button feishu-sync--primary" type="button" disabled={blocked || configDirty || !configured || !hierarchyReady}
-            onClick={syncVault}><FeishuIcon name="refresh-cw" />{autoStatus?.running || busy ? "正在同步…" : "立即同步此仓库"}</button>
+            onClick={() => void syncVault()}><FeishuIcon name="refresh-cw" />{autoStatus?.running || busy ? "正在同步…" : "立即同步此仓库"}</button>
           <button className="feishu-sync--button" type="button" disabled={blocked || configDirty || !service}
-            onClick={previewVault}><FeishuIcon name="scan-line" />预览同步范围</button>
+            onClick={() => void previewVault()}><FeishuIcon name="scan-line" />预览同步范围</button>
         </div>
         {autoStatus?.summary && <p className="feishu-sync--runSummary">上次结果：成功 {Number(autoStatus.summary.synced || 0)}，失败 {Number(autoStatus.summary.failed || 0)}，跳过 {Number(autoStatus.summary.skipped || 0)}</p>}
         {feishuGlobalSyncError(autoStatus) && syncIssues.length > 0 && <p className="feishu-sync--error" role="alert">{feishuGlobalSyncError(autoStatus)}</p>}
@@ -1147,18 +1184,18 @@ function App({ navigation }) {
             spellCheck={false} placeholder="搜索同步笔记的完整路径" onChange={event => setCandidate(event.target.value)} />
           <datalist id={listId.current}>{suggestions.map(file => <option key={file} value={file} />)}</datalist>
           <button className="feishu-sync--button" type="submit" disabled={blocked || !service || !candidate.trim()}>查看行动</button>
-          <button className="feishu-sync--button" type="button" disabled={blocked || !path || reading} onClick={() => { setError(""); refresh(); }}>刷新本地</button>
+          <button className="feishu-sync--button" type="button" disabled={blocked || !path || reading} onClick={() => { setError(""); void refresh(); }}>刷新本地</button>
         </div>
       </form>
       {busy && <p className="feishu-sync--hint" role="status">正在{busy}…</p>}
       {reading && <p className="feishu-sync--hint" role="status">正在读取本地行动…</p>}
       {note && <section className="feishu-sync--note" ref={noteRef} tabIndex={-1}>
-        <h3 className="feishu-sync--subtitle">{path.split("/").pop().replace(/\.md$/, "")}</h3>
+        <h3 className="feishu-sync--subtitle">{path.split("/").pop()?.replace(/\.md$/, "") || ""}</h3>
         <p className="feishu-sync--hint">{path}</p>
         {selectedTaskId && !tasks.some(task => (task.id || task.record?.id) === selectedTaskId) && <p className="feishu-sync--notice">该行动暂未在这篇笔记中找到。请核对行动是否已移动、改写或删除；原同步记录仍保留。</p>}
         <div className="feishu-sync--actions">
           <button className="feishu-sync--button" type="button" disabled={remoteBlocked}
-            onClick={() => run("检查此笔记已关联行动", () => service.syncAll(path), batchMessage)}>同步此笔记已关联行动</button>
+            onClick={() => void run("检查此笔记已关联行动", () => requireService().syncAll(path), batchMessage)}>同步此笔记已关联行动</button>
         </div>
         {note.isProject && <div className="feishu-sync--project">
           <div className="feishu-sync--projectMeta">
@@ -1173,7 +1210,7 @@ function App({ navigation }) {
           </div>
           <div className="feishu-sync--actions">
             <button className="feishu-sync--button feishu-sync--primary" type="button" disabled={remoteBlocked || !hierarchyReady || typeof service?.syncProject !== "function"}
-              onClick={() => run("同步项目与子任务", () => service.syncProject(path), batchMessage)}>同步项目与 {projectActionCount} 条子任务</button>
+              onClick={() => void run("同步项目与子任务", () => requireService().syncProject(path), batchMessage)}>同步项目与 {projectActionCount} 条子任务</button>
           </div>
           <p className="feishu-sync--hint">同步项目父任务、area 分组、独立状态字段，以及本笔记所有普通 checkbox。空项目也可同步。已完成或已取消会关闭父任务，结束项目不会批量结束行动。</p>
           {note.projectStatus === "canceled" && <p className="feishu-sync--hint">已取消项目若在飞书重开会提示冲突；需要恢复时，先在 Obsidian 明确改为待办（todo）或进行中（doing）。</p>}
@@ -1185,7 +1222,7 @@ function App({ navigation }) {
         </div>}
         {note.kind === "task" && <div className="feishu-sync--actions">
           <button className="feishu-sync--button feishu-sync--primary" type="button" disabled={remoteBlocked || !hierarchyReady}
-            onClick={() => run("同步笔记行动", () => service.syncVault({ paths: [path] }), batchMessage)}>同步此笔记全部行动</button>
+            onClick={() => void run("同步笔记行动", () => requireService().syncVault({ paths: [path] }), batchMessage)}>同步此笔记全部行动</button>
           <span className="feishu-sync--hint">行动进入当前仓库清单。</span>
         </div>}
         {note.kind === "daily" && !config?.defaultTasklistGuid && <p className="feishu-sync--notice">日记行动发送前，请先在账号配置填写默认清单 GUID。</p>}
@@ -1204,7 +1241,7 @@ function App({ navigation }) {
         </details>
         <ul className="feishu-sync--tasks">{tasks.map(task => <FeishuAction key={path + ":" + task.line + ":" + (task.vaultId || "") + ":" + (task.id || "")} task={task} isProject={note.isProject}
           disabled={remoteBlocked} sendDisabled={!hierarchyReady || (note.kind === "daily" && !config?.defaultTasklistGuid)} highlighted={selectedTaskId ? selectedTaskId === (task.id || task.record?.id) : selectedLine === task.line}
-          onSend={send} onSync={sync} onConflict={readConflict} onRecover={(id, guid) => run("恢复任务关联", () => service.recoverTask(id, guid), "已校验并恢复任务关联。请查看当前状态。")} />)}</ul>
+          onSend={send} onSync={sync} onConflict={readConflict} onRecover={(id, guid) => run("恢复任务关联", () => requireService().recoverTask(id, guid), "已校验并恢复任务关联。请查看当前状态。")} />)}</ul>
         {!tasks.length && <p className="feishu-sync--empty">{note.isProject ? "此项目暂时没有 checkbox，仍可同步父任务、分组和项目状态。" : "这篇笔记没有行动，添加 checkbox 后再刷新。"}</p>}
       </section>}
       {!path && <div className="feishu-sync--empty"><FeishuIcon name="file-search" /><h4>选择一篇同步笔记</h4><p>输入笔记路径，查看行动与飞书的关联状态。</p></div>}
@@ -1225,7 +1262,7 @@ function App({ navigation }) {
   );
 }
 
-class PanelBoundary extends React.Component {
+class PanelBoundary extends React.Component<React.PropsWithChildren, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() { return { failed: true }; }
   render() {
@@ -1235,7 +1272,7 @@ class PanelBoundary extends React.Component {
   }
 }
 
-export function FeishuPanel({ runtime, navigation }) {
+export function FeishuPanel({ runtime, navigation }: { runtime: PluginRuntime; navigation?: Navigation }) {
   return <PanelBoundary><Runtime.Provider value={runtime}><App navigation={navigation} /></Runtime.Provider></PanelBoundary>;
 }
 
@@ -1250,13 +1287,13 @@ function SettingsContent() {
   return <div className="feishu-sync--root feishu-sync--settingsPage">
     <FeishuConfig controller={controller} disabled={running} />
     <div className="feishu-sync--actions">
-      <button className="feishu-sync--button" type="button" onClick={() => plugin.openPanel(undefined, undefined, 'overview')}>打开同步概览</button>
-      <button className="feishu-sync--button" type="button" onClick={() => plugin.openPanel(undefined, undefined, 'transfer')}>跨设备接入</button>
-      <button className="feishu-sync--button" type="button" onClick={() => plugin.openPanel(undefined, undefined, 'help')}>使用帮助</button>
+      <button className="feishu-sync--button" type="button" onClick={() => void plugin.openPanel(undefined, undefined, 'overview').catch(error => plugin.report(error))}>打开同步概览</button>
+      <button className="feishu-sync--button" type="button" onClick={() => void plugin.openPanel(undefined, undefined, 'transfer').catch(error => plugin.report(error))}>跨设备接入</button>
+      <button className="feishu-sync--button" type="button" onClick={() => void plugin.openPanel(undefined, undefined, 'help').catch(error => plugin.report(error))}>使用帮助</button>
     </div>
   </div>;
 }
 
-export function FeishuSettings({ runtime }) {
+export function FeishuSettings({ runtime }: { runtime: PluginRuntime }) {
   return <PanelBoundary><Runtime.Provider value={runtime}><SettingsContent /></Runtime.Provider></PanelBoundary>;
 }

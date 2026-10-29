@@ -10,7 +10,7 @@ The plugin includes a dedicated panel, settings, commands, and background sync. 
 
 ## Install and connect
 
-1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/LLLLAAAA2333/feishu-task-sync/releases/latest) into `.obsidian/plugins/feishu-task-sync/` in your vault. You can also extract `Feishu-Task-Sync-1.5.1-Desktop.zip` into that directory.
+1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/LLLLAAAA2333/feishu-task-sync/releases/latest) into `.obsidian/plugins/feishu-task-sync/` in your vault. You can also extract `Feishu-Task-Sync-1.5.2-Desktop.zip` into that directory.
 2. Enable **Feishu Task Sync** in Obsidian's community plugin settings.
 3. Create a custom enterprise app in the [Feishu developer console](https://open.feishu.cn/app). Enable these app permissions: `task:task:write`, `task:tasklist:write`, `task:section:write`, and `task:custom_field:write`. Publish the app version.
 4. Enter the App ID, App Secret, and the receiving user's Open ID in the plugin settings. You can copy the Open ID from the [API Explorer](https://open.feishu.cn/api-explorer) for the same app.

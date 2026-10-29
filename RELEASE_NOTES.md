@@ -1,11 +1,11 @@
-# Feishu Task Sync 1.5.1
+# Feishu Task Sync 1.5.2
 
-**English** | [简体中文](https://github.com/LLLLAAAA2333/feishu-task-sync/blob/1.5.1/RELEASE_NOTES.zh-CN.md)
+**English** | [简体中文](https://github.com/LLLLAAAA2333/feishu-task-sync/blob/1.5.2/RELEASE_NOTES.zh-CN.md)
 
-Fix the community review error caused by removing workspace leaves during plugin unload. Disabling or reloading now preserves panel placement, and closing a view releases its React resources.
+The complete React interface now uses strict TypeScript checking, with explicit types for configuration, task associations, conflict previews, and scheduler results. This resolves the unsafe-type warnings in the community review.
 
-Settings are searchable on Obsidian 1.13 and later, with the existing settings form retained. Earlier Obsidian versions keep the same settings entry point. Browser timers and scoped CSS selectors improve compatibility, and the three installable release files include GitHub build provenance attestations.
+Asynchronous interface actions are handled explicitly, and imported folder defaults are checked before filling the form. Panel placement, settings search, and signed build provenance from 1.5.1 remain available.
 
 Update `main.js`, `manifest.json`, and `styles.css` in `.obsidian/plugins/feishu-task-sync/` and reload the plugin. Existing settings, vault identity, task associations, and automatic sync are retained.
 
-[Installation and upgrade guide](https://github.com/LLLLAAAA2333/feishu-task-sync/blob/1.5.1/README.md)
+[Installation and upgrade guide](https://github.com/LLLLAAAA2333/feishu-task-sync/blob/1.5.2/README.md)
